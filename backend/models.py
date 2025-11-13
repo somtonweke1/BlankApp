@@ -1,0 +1,187 @@
+"""
+Database models for Mastery Machine
+"""
+from sqlalchemy import Column, String, Integer, Float, Boolean, Text, ForeignKey, TIMESTAMP, JSON
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+import uuid
+
+Base = declarative_base()
+
+
+class User(Base):
+    __tablename__ = 'users'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), unique=True, nullable=False)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    total_concepts_mastered = Column(Integer, default=0)
+    total_session_time_minutes = Column(Integer, default=0)
+
+    # Relationships
+    materials = relationship("Material", back_populates="user")
+    sessions = relationship("Session", back_populates="user")
+    concept_states = relationship("UserConceptState", back_populates="user")
+
+
+class Material(Base):
+    __tablename__ = 'materials'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'))
+    filename = Column(String(255), nullable=False)
+    file_path = Column(Text, nullable=False)
+    upload_date = Column(TIMESTAMP, server_default=func.now())
+    total_pages = Column(Integer)
+    processing_status = Column(String(50), default='uploaded')
+    estimated_time_minutes = Column(Integer)
+    error_message = Column(Text)
+
+    # Relationships
+    user = relationship("User", back_populates="materials")
+    concepts = relationship("Concept", back_populates="material")
+
+
+class Concept(Base):
+    __tablename__ = 'concepts'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    material_id = Column(UUID(as_uuid=True), ForeignKey('materials.id', ondelete='CASCADE'))
+    name = Column(String(255), nullable=False)
+    type = Column(String(50))
+    full_name = Column(Text)
+    definition = Column(Text)
+    context = Column(Text)
+    complexity = Column(Integer, default=1)
+    domain = Column(String(100))
+    formulas = Column(JSONB, default=list)
+    examples = Column(JSONB, default=list)
+    related_concepts = Column(JSONB, default=list)
+    dependencies = Column(JSONB, default=list)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    # Relationships
+    material = relationship("Material", back_populates="concepts")
+    questions = relationship("Question", back_populates="concept")
+    user_states = relationship("UserConceptState", back_populates="concept")
+
+
+class Question(Base):
+    __tablename__ = 'questions'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    concept_id = Column(UUID(as_uuid=True), ForeignKey('concepts.id', ondelete='CASCADE'))
+    mode = Column(String(50), nullable=False)
+    question_text = Column(Text, nullable=False)
+    answer_text = Column(Text)
+    difficulty = Column(Integer, default=5)
+    question_data = Column(JSONB, default=dict)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    # Relationships
+    concept = relationship("Concept", back_populates="questions")
+
+
+class UserConceptState(Base):
+    __tablename__ = 'user_concept_states'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'))
+    concept_id = Column(UUID(as_uuid=True), ForeignKey('concepts.id', ondelete='CASCADE'))
+
+    # State
+    state = Column(String(50), default='untouched')
+
+    # Criterion 1: Accuracy
+    accuracy = Column(Float, default=0.0)
+    total_attempts = Column(Integer, default=0)
+    correct_attempts = Column(Integer, default=0)
+
+    # Criterion 2: Stability
+    consecutive_perfect = Column(Integer, default=0)
+    max_streak = Column(Integer, default=0)
+
+    # Criterion 3: Speed/Fluency
+    avg_response_time_ms = Column(Integer)
+    baseline_response_time_ms = Column(Integer)
+    hesitation_count = Column(Integer, default=0)
+
+    # Criterion 4: Format Invariance
+    formats_tested = Column(JSONB, default=list)
+    formats_passed = Column(JSONB, default=list)
+
+    # Criterion 5: Predicted Recall
+    predicted_recall_probability = Column(Float, default=0.0)
+    last_tested_at = Column(TIMESTAMP)
+    next_review_at = Column(TIMESTAMP)
+
+    # Mastery
+    mastered_at = Column(TIMESTAMP)
+    last_revalidation_at = Column(TIMESTAMP)
+
+    # Current session
+    current_mode = Column(String(50))
+    mode_start_time = Column(TIMESTAMP)
+
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    user = relationship("User", back_populates="concept_states")
+    concept = relationship("Concept", back_populates="user_states")
+
+
+class Response(Base):
+    __tablename__ = 'responses'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'))
+    concept_id = Column(UUID(as_uuid=True), ForeignKey('concepts.id', ondelete='CASCADE'))
+    question_id = Column(UUID(as_uuid=True), ForeignKey('questions.id', ondelete='CASCADE'))
+    session_id = Column(UUID(as_uuid=True))
+
+    mode = Column(String(50), nullable=False)
+
+    # Response
+    user_answer = Column(Text)
+    is_correct = Column(Boolean, nullable=False)
+    is_partial = Column(Boolean, default=False)
+
+    # Timing
+    response_time_ms = Column(Integer, nullable=False)
+    time_to_first_keystroke_ms = Column(Integer)
+
+    # Context
+    difficulty_at_time = Column(Integer)
+    sequence_number = Column(Integer)
+
+    # Actions
+    skipped = Column(Boolean, default=False)
+    peeked = Column(Boolean, default=False)
+
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+
+class Session(Base):
+    __tablename__ = 'sessions'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'))
+    material_id = Column(UUID(as_uuid=True), ForeignKey('materials.id', ondelete='CASCADE'))
+
+    start_time = Column(TIMESTAMP, server_default=func.now())
+    end_time = Column(TIMESTAMP)
+    duration_minutes = Column(Integer)
+
+    total_questions = Column(Integer, default=0)
+    total_correct = Column(Integer, default=0)
+    concepts_worked = Column(Integer, default=0)
+    concepts_mastered_this_session = Column(Integer, default=0)
+
+    goal = Column(String(100))
+    goal_deadline = Column(TIMESTAMP)
+
+    # Relationships
+    user = relationship("User", back_populates="sessions")
