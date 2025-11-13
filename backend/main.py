@@ -1,7 +1,7 @@
 """
 Mastery Machine - Main FastAPI Application
 """
-from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, Depends, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 import uuid
 from typing import Optional
 import json
+from pydantic import BaseModel
 
 from models import Base, User, Material, Session as SessionModel
 from pdf_processor import PDFProcessor
@@ -18,6 +19,12 @@ from concept_extractor import ConceptExtractor
 from engagement_engine import EngagementEngine
 
 load_dotenv()
+
+
+# Pydantic models for request bodies
+class UserCreate(BaseModel):
+    email: str
+
 
 # Database setup
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/mastery_machine")
@@ -86,11 +93,11 @@ async def root():
 
 
 @app.post("/api/users")
-async def create_user(email: str, db: Session = Depends(get_db)):
+async def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
     """Create or get user"""
-    user = db.query(User).filter(User.email == email).first()
+    user = db.query(User).filter(User.email == user_data.email).first()
     if not user:
-        user = User(email=email)
+        user = User(email=user_data.email)
         db.add(user)
         db.commit()
         db.refresh(user)
