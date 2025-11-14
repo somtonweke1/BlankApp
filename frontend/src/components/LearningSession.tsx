@@ -43,7 +43,17 @@ interface SessionComplete {
   }
 }
 
-type Message = Question | Feedback | ModeSwitch | SessionComplete
+interface Hint {
+  type: 'hint'
+  hint: string
+}
+
+interface Peek {
+  type: 'peek'
+  answer: string
+}
+
+type Message = Question | Feedback | ModeSwitch | SessionComplete | Hint | Peek
 
 function LearningSession({ sessionId, filename, totalConcepts, onComplete }: LearningSessionProps) {
   const [ws, setWs] = useState<WebSocket | null>(null)
@@ -52,6 +62,8 @@ function LearningSession({ sessionId, filename, totalConcepts, onComplete }: Lea
   const [answer, setAnswer] = useState('')
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [showFeedback, setShowFeedback] = useState(false)
+  const [hint, setHint] = useState<string | null>(null)
+  const [peekedAnswer, setPeekedAnswer] = useState<string | null>(null)
   const [stats, setStats] = useState({
     answered: 0,
     correct: 0,
@@ -101,6 +113,8 @@ function LearningSession({ sessionId, filename, totalConcepts, onComplete }: Lea
         setAnswer('')
         setShowFeedback(false)
         setFeedback(null)
+        setHint(null)
+        setPeekedAnswer(null)
         setQuestionStartTime(Date.now())
         setFirstKeystrokeTime(null)
         setTimeout(() => answerInputRef.current?.focus(), 100)
@@ -114,6 +128,14 @@ function LearningSession({ sessionId, filename, totalConcepts, onComplete }: Lea
           correct: prev.correct + (message.correct ? 1 : 0),
           mastered: prev.mastered + (message.mastered ? 1 : 0)
         }))
+        break
+
+      case 'hint':
+        setHint(message.hint)
+        break
+
+      case 'peek':
+        setPeekedAnswer(message.answer)
         break
 
       case 'mode_switch':
@@ -248,6 +270,32 @@ function LearningSession({ sessionId, filename, totalConcepts, onComplete }: Lea
                 onKeyPress={handleKeyPress}
                 autoFocus
               />
+
+              {hint && (
+                <div style={{
+                  padding: '10px',
+                  margin: '10px 0',
+                  background: '#fff3cd',
+                  border: '1px solid #ffc107',
+                  borderRadius: '5px',
+                  color: '#856404'
+                }}>
+                  <strong>💡 Hint:</strong> {hint}
+                </div>
+              )}
+
+              {peekedAnswer && (
+                <div style={{
+                  padding: '10px',
+                  margin: '10px 0',
+                  background: '#d1ecf1',
+                  border: '1px solid #bee5eb',
+                  borderRadius: '5px',
+                  color: '#0c5460'
+                }}>
+                  <strong>👁️ Answer:</strong> {peekedAnswer}
+                </div>
+              )}
 
               <div className="action-buttons">
                 <button
