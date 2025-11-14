@@ -244,7 +244,7 @@ class EngagementEngine:
         self.sequence_number += 1
 
         return {
-            'type': 'answer',
+            'type': 'peek',
             'answer': question.answer_text,
             'explanation': 'Take your time to understand this. We\'ll test it again later.'
         }
