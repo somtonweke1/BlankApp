@@ -258,12 +258,17 @@ async def start_session(
     )
     engagement_engines[str(session.id)] = engine
 
+    # Construct WebSocket URL based on environment
+    backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+    ws_protocol = "wss" if backend_url.startswith("https") else "ws"
+    ws_host = backend_url.replace("https://", "").replace("http://", "")
+
     return {
         "session_id": str(session.id),
         "material_id": str(material.id),
         "filename": material.filename,
         "total_concepts": engine.total_concepts,
-        "websocket_url": f"ws://localhost:8000/ws/{session.id}"
+        "websocket_url": f"{ws_protocol}://{ws_host}/ws/{session.id}"
     }
 
 
