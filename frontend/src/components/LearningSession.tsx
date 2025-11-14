@@ -53,7 +53,12 @@ interface Peek {
   answer: string
 }
 
-type Message = Question | Feedback | ModeSwitch | SessionComplete | Hint | Peek
+interface SkipRecorded {
+  type: 'skip_recorded'
+  message: string
+}
+
+type Message = Question | Feedback | ModeSwitch | SessionComplete | Hint | Peek | SkipRecorded
 
 function LearningSession({ sessionId, filename, totalConcepts, onComplete }: LearningSessionProps) {
   const [ws, setWs] = useState<WebSocket | null>(null)
@@ -136,6 +141,11 @@ function LearningSession({ sessionId, filename, totalConcepts, onComplete }: Lea
 
       case 'peek':
         setPeekedAnswer(message.answer)
+        break
+
+      case 'skip_recorded':
+        // Skip recorded, next question will come automatically
+        console.log('Question skipped:', message.message)
         break
 
       case 'mode_switch':
