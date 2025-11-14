@@ -121,7 +121,13 @@ Example:
                     all_concepts.append(concept)
 
             except Exception as e:
-                print(f"Error extracting concepts from chunk: {e}")
+                error_msg = f"Error extracting concepts from chunk: {str(e)}"
+                print(error_msg)
+                print(f"Error type: {type(e).__name__}")
+                print(f"Full error: {repr(e)}")
+                # Don't silently continue - we need at least some concepts
+                if "invalid_api_key" in str(e).lower() or "authentication" in str(e).lower():
+                    raise Exception(f"OpenAI API key error: {str(e)}. Please check your OPENAI_API_KEY in Render environment variables.")
                 continue
 
         # Commit all concepts
