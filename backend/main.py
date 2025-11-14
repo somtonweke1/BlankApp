@@ -259,7 +259,13 @@ async def start_session(
     engagement_engines[str(session.id)] = engine
 
     # Construct WebSocket URL based on environment
-    backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+    # Auto-detect Render deployment
+    render_external_url = os.getenv("RENDER_EXTERNAL_URL")
+    if render_external_url:
+        backend_url = render_external_url
+    else:
+        backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+
     ws_protocol = "wss" if backend_url.startswith("https") else "ws"
     ws_host = backend_url.replace("https://", "").replace("http://", "")
 
