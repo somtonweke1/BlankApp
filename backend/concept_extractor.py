@@ -23,23 +23,60 @@ class ConceptExtractor:
         """
         Extract testable concepts from PDF content
 
-        For each concept, we extract:
-        - name: Short identifier
-        - type: 'definition', 'formula', 'theorem', 'process', 'fact'
-        - full_name: Complete formal name
-        - definition: Clear explanation
-        - context: Where/how it's used
-        - complexity: 1-10 scale
-        - domain: Subject area
-        - formulas: Mathematical representations
-        - examples: Concrete examples
-        - related_concepts: Dependencies and connections
+        FALLBACK MODE: Simple text-based extraction (no AI needed)
+        Splits text into paragraphs and creates concepts from each
         """
         text = pdf_data['text']
 
-        # Split into chunks if text is too long
-        chunks = self._chunk_text(text, max_tokens=6000)
+        # Simple approach: Split by paragraphs and create concepts
+        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip() and len(p.strip()) > 50]
 
+        all_concepts = []
+
+        # Create concepts from paragraphs
+        for i, paragraph in enumerate(paragraphs[:20]):  # Limit to 20 concepts
+            # Extract first sentence as name
+            sentences = paragraph.split('.')
+            first_sentence = sentences[0].strip() if sentences else paragraph[:50]
+
+            concept = Concept(
+                material_id=material_id,
+                name=f"Concept {i+1}: {first_sentence[:40]}",
+                type="concept",
+                full_name=first_sentence[:100],
+                definition=paragraph[:500],
+                context="From uploaded material",
+                complexity=min(i + 1, 10),
+                domain="general"
+            )
+            db.add(concept)
+            all_concepts.append(concept)
+
+        # If no paragraphs found, create concepts from sentences
+        if not all_concepts:
+            sentences = [s.strip() + '.' for s in text.split('.') if s.strip() and len(s.strip()) > 20]
+
+            for i, sentence in enumerate(sentences[:20]):
+                concept = Concept(
+                    material_id=material_id,
+                    name=f"Topic {i+1}",
+                    type="fact",
+                    full_name=sentence[:100],
+                    definition=sentence[:500],
+                    context="From uploaded material",
+                    complexity=5,
+                    domain="general"
+                )
+                db.add(concept)
+                all_concepts.append(concept)
+
+        db.commit()
+        return all_concepts
+
+    async def extract_concepts_with_ai(self, pdf_data: Dict, material_id: uuid.UUID, db: Session) -> List[Concept]:
+        """AI-powered extraction (requires OpenAI) - DEPRECATED"""
+        text = pdf_data['text']
+        chunks = self._chunk_text(text, max_tokens=6000)
         all_concepts = []
 
         for chunk in chunks:
@@ -137,45 +174,39 @@ Example:
 
     async def generate_questions(self, concepts: List[Concept], db: Session):
         """
-        Generate questions for each concept across different modes
-
-        Modes to generate:
-        - RAPID_FIRE: Quick recall questions
-        - FILL_STORY: Fill-in-the-blank in context
-        - EXPLAIN_BACK: Explain concept in own words
-        - NUMBER_SWAP: Apply formula with different numbers
-        - SPOT_ERROR: Find mistake in example
-        - BUILD_MAP: Show relationships between concepts
+        Generate questions for each concept - SIMPLE MODE (no AI)
+        Creates basic questions from concept definitions
         """
         for concept in concepts:
-            # Generate 2 questions per mode
-            modes = [
-                'RAPID_FIRE',
-                'FILL_STORY',
-                'EXPLAIN_BACK',
-                'NUMBER_SWAP',
-                'SPOT_ERROR',
-                'BUILD_MAP'
+            # Generate simple questions for key modes
+            modes_and_questions = [
+                {
+                    'mode': 'RAPID_FIRE',
+                    'question': f"What is {concept.name}?",
+                    'answer': concept.definition[:200] if concept.definition else concept.full_name
+                },
+                {
+                    'mode': 'GUIDED_SOLVE',
+                    'question': f"Explain {concept.name} in your own words",
+                    'answer': concept.definition[:300] if concept.definition else concept.full_name
+                },
+                {
+                    'mode': 'EXPLAIN_BACK',
+                    'question': f"How would you describe {concept.name}?",
+                    'answer': concept.definition[:250] if concept.definition else concept.full_name
+                }
             ]
 
-            for mode in modes:
-                try:
-                    questions = await self._generate_mode_questions(concept, mode, count=2)
-
-                    for q_data in questions:
-                        question = Question(
-                            concept_id=concept.id,
-                            mode=mode,
-                            question_text=q_data['question'],
-                            answer_text=q_data['answer'],
-                            difficulty=q_data.get('difficulty', 5),
-                            question_data=q_data.get('data', {})
-                        )
-                        db.add(question)
-
-                except Exception as e:
-                    print(f"Error generating {mode} questions for {concept.name}: {e}")
-                    continue
+            for q_data in modes_and_questions:
+                question = Question(
+                    concept_id=concept.id,
+                    mode=q_data['mode'],
+                    question_text=q_data['question'],
+                    answer_text=q_data['answer'],
+                    difficulty=concept.complexity,
+                    question_data={}
+                )
+                db.add(question)
 
         db.commit()
 
