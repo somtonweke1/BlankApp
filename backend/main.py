@@ -85,10 +85,111 @@ app.add_middleware(
 @app.get("/")
 async def root():
     """Health check"""
+    openai_configured = bool(os.getenv("OPENAI_API_KEY"))
     return {
         "status": "online",
         "service": "Mastery Machine",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "openai_configured": openai_configured
+    }
+
+
+@app.post("/api/demo/create")
+async def create_demo_material(db: Session = Depends(get_db)):
+    """Create demo material with sample concepts for testing"""
+    # Get or create demo user
+    user = db.query(User).filter(User.email == "demo@masteryma chine.com").first()
+    if not user:
+        user = User(email="demo@masterymachine.com")
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    # Create demo material
+    material_id = uuid.uuid4()
+    material = Material(
+        id=material_id,
+        user_id=user.id,
+        filename="Demo Material - Python Basics.pdf",
+        file_path="demo.pdf",
+        total_pages=3,
+        estimated_time_minutes=10,
+        processing_status='ready'
+    )
+    db.add(material)
+
+    # Create sample concepts
+    concepts_data = [
+        {
+            "name": "Python Variables",
+            "type": "concept",
+            "full_name": "Variable Assignment in Python",
+            "definition": "Variables are containers for storing data values. In Python, you create a variable by assigning a value to a name.",
+            "complexity": 2
+        },
+        {
+            "name": "For Loops",
+            "type": "concept",
+            "full_name": "For Loop Iteration",
+            "definition": "A for loop is used for iterating over a sequence (list, tuple, string, or range).",
+            "complexity": 3
+        },
+        {
+            "name": "Functions",
+            "type": "concept",
+            "full_name": "Function Definition and Calling",
+            "definition": "A function is a block of reusable code that performs a specific task. Defined with 'def' keyword.",
+            "complexity": 4
+        }
+    ]
+
+    for concept_data in concepts_data:
+        concept = Concept(
+            material_id=material_id,
+            name=concept_data["name"],
+            type=concept_data["type"],
+            full_name=concept_data["full_name"],
+            definition=concept_data["definition"],
+            context="Python programming basics",
+            complexity=concept_data["complexity"],
+            domain="programming"
+        )
+        db.add(concept)
+        db.commit()
+        db.refresh(concept)
+
+        # Add sample questions for each concept
+        questions = [
+            {
+                "mode": "RAPID_FIRE",
+                "question": f"What is {concept_data['name']}?",
+                "answer": concept_data["definition"][:50]
+            },
+            {
+                "mode": "GUIDED_SOLVE",
+                "question": f"Explain how {concept_data['name']} works in Python",
+                "answer": concept_data["definition"]
+            }
+        ]
+
+        for q_data in questions:
+            question = Question(
+                concept_id=concept.id,
+                mode=q_data["mode"],
+                question_text=q_data["question"],
+                answer_text=q_data["answer"],
+                difficulty=concept_data["complexity"]
+            )
+            db.add(question)
+
+    db.commit()
+
+    return {
+        "material_id": str(material_id),
+        "user_id": str(user.id),
+        "filename": material.filename,
+        "total_concepts": len(concepts_data),
+        "message": "Demo material created! You can now start a learning session."
     }
 
 
