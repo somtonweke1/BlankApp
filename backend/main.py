@@ -237,7 +237,11 @@ async def upload_material(
 
     # Save file
     material_id = uuid.uuid4()
-    upload_dir = os.path.join(os.path.dirname(__file__), "..", "uploads")
+    # Use /tmp on production (Render) or local uploads directory
+    if os.getenv("RENDER"):
+        upload_dir = "/tmp/uploads"
+    else:
+        upload_dir = os.path.join(os.path.dirname(__file__), "..", "uploads")
     os.makedirs(upload_dir, exist_ok=True)
 
     file_path = os.path.join(upload_dir, f"{material_id}.pdf")
@@ -263,26 +267,37 @@ async def upload_material(
         material.processing_status = 'extracting'
         db.commit()
 
+        print(f"Extracting PDF from: {file_path}")
         pdf_data = pdf_processor.extract(file_path)
         material.total_pages = pdf_data['total_pages']
         material.estimated_time_minutes = pdf_data['estimated_time_minutes']
+        print(f"PDF extracted: {material.total_pages} pages")
 
         # Extract concepts
         material.processing_status = 'extracting_concepts'
         db.commit()
 
+        print(f"Extracting concepts...")
         concepts = await concept_extractor.extract_concepts(pdf_data, material.id, db)
+        print(f"Extracted {len(concepts)} concepts")
 
         # Generate questions
         material.processing_status = 'generating_questions'
         db.commit()
 
+        print(f"Generating questions...")
         await concept_extractor.generate_questions(concepts, db)
+        print(f"Questions generated successfully")
 
         material.processing_status = 'ready'
         db.commit()
 
     except Exception as e:
+        print(f"ERROR during processing: {str(e)}")
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
+
         material.processing_status = 'error'
         material.error_message = str(e)
         db.commit()
@@ -290,6 +305,7 @@ async def upload_material(
 
     return {
         "material_id": str(material_id),
+        "user_id": user_id,
         "filename": file.filename,
         "status": "ready",
         "total_pages": material.total_pages,
