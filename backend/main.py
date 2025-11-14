@@ -310,6 +310,13 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     try:
         # Send first question
         question_data = await engine.get_next_question()
+        if not question_data:
+            await websocket.send_json({
+                "type": "error",
+                "message": "No concepts found for this material. Please upload a valid PDF with content."
+            })
+            await websocket.close()
+            return
         await websocket.send_json(question_data)
 
         # Main interaction loop
@@ -373,6 +380,16 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         # Save session state
         if engine:
             await engine.save_session_state()
+    except Exception as e:
+        print(f"WebSocket error for session {session_id}: {str(e)}")
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"Server error: {str(e)}"
+            })
+            await websocket.close()
+        except:
+            pass
 
     finally:
         if session_id in engagement_engines:
