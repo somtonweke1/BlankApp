@@ -88,6 +88,10 @@ class EngagementEngine:
         3. OPTIMAL CHALLENGE: Select concept at optimal difficulty
         4. MODE SELECTION: Choose mode based on concept state
         """
+        # Check if we have any concepts at all
+        if not self.concepts:
+            return None  # No concepts extracted from material
+
         # Step 1: Check for concepts needing rescue
         rescue_concept = await self._find_rescue_concept()
         if rescue_concept:
@@ -362,7 +366,9 @@ class EngagementEngine:
 
         if not scores:
             # All mastered and not due for review - session complete
-            return self.concepts[0]  # Return any
+            if self.concepts:
+                return self.concepts[0]  # Return any
+            return None  # No concepts available
 
         # Select weighted random
         scores.sort(key=lambda x: x[1], reverse=True)
@@ -422,6 +428,10 @@ class EngagementEngine:
             question = self.db.query(Question).filter(
                 Question.concept_id == self.current_concept.id
             ).first()
+
+        if not question:
+            # No questions generated for this concept - critical error
+            return None
 
         return {
             'type': 'question',
