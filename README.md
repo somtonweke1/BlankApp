@@ -242,6 +242,3 @@ MIT
 
 This is a prototype implementation. Contributions welcome!
 
-## Credits
-
-Built to solve a critical problem: students who study hard but blank under pressure during exams. This tool provides a scientific guarantee of mastery through adaptive engagement and rigorous validation.
