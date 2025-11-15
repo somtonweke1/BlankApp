@@ -63,10 +63,13 @@ function Upload({ onUploadComplete }: UploadProps) {
       })
 
       if (!uploadResponse.ok) {
-        throw new Error('Failed to upload file')
+        const errorText = await uploadResponse.text()
+        console.error('Upload failed:', errorText)
+        throw new Error(`Failed to upload file: ${errorText}`)
       }
 
       const uploadData = await uploadResponse.json()
+      console.log('Upload successful:', uploadData)
 
       setProgress('Processing complete!')
 
@@ -75,7 +78,7 @@ function Upload({ onUploadComplete }: UploadProps) {
         uploadData.material_id,
         uploadData.filename,
         uploadData.total_concepts,
-        userId
+        uploadData.user_id || userId
       )
 
     } catch (error) {

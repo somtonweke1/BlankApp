@@ -26,12 +26,20 @@ function App() {
 
   const startSession = async (materialId: string, _filename: string, _totalConcepts: number, uid: string) => {
     try {
+      console.log('Starting session with:', { materialId, uid })
       const response = await fetch(`${API_URL}/api/sessions/start/${materialId}?user_id=${uid}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       })
 
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Session start failed:', errorText)
+        throw new Error(`Failed to start session: ${errorText}`)
+      }
+
       const data = await response.json()
+      console.log('Session started:', data)
 
       setSessionInfo({
         sessionId: data.session_id,
@@ -43,7 +51,7 @@ function App() {
       setScreen('learning')
     } catch (error) {
       console.error('Failed to start session:', error)
-      alert('Failed to start learning session')
+      alert(`Failed to start learning session: ${error}`)
     }
   }
 
