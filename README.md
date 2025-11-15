@@ -1,6 +1,6 @@
 # Mastery Machine
 
-Upload any study material and master it through adaptive, active engagement. Guaranteed 99% accuracy and 95% recall.
+Upload any study material and master it through adaptive, active engagement. Guaranteed  accuracy and  recall.
 
 ## Features
 
@@ -9,11 +9,11 @@ Upload any study material and master it through adaptive, active engagement. Gua
 - **12 Engagement Modes**: From foundation building to mastery validation
 - **Adaptive Mode Switching**: Detects anxiety and adjusts difficulty in real-time
 - **5-Criteria Mastery Detection**:
-  1. 99% accuracy
-  2. 10 consecutive perfect answers
-  3. Speed/fluency (fast recall without hesitation)
-  4. Format invariance (works across question types)
-  5. 95% predicted recall probability after 1 week
+  1. accuracy
+  3. 10 consecutive perfect answers
+  4. Speed/fluency (fast recall without hesitation)
+  5. Format invariance (works across question types)
+  6. predicted recall probability after 1 week
 
 ## Architecture
 
@@ -147,7 +147,7 @@ Each concept must meet ALL 5 criteria:
 2. **Stability**: 10 consecutive perfect answers (no flukes)
 3. **Speed/Fluency**: Response time ≤ 1.3x baseline (automatic recall)
 4. **Format Invariance**: Correct across 80%+ question formats
-5. **Predicted Recall ≥ 95%**: ACT-R memory model predicts retention
+5. **Predicted Recall ≥  **: ACT-R memory model predicts retention
 
 ### Engagement Modes
 
