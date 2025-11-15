@@ -143,7 +143,7 @@ Frontend runs on http://localhost:5173
 
 Each concept must meet ALL 5 criteria:
 
-1. **Accuracy ≥ 99%**: Near-perfect correctness
+1. **Accuracy ≥ **: Near-perfect correctness
 2. **Stability**: 10 consecutive perfect answers (no flukes)
 3. **Speed/Fluency**: Response time ≤ 1.3x baseline (automatic recall)
 4. **Format Invariance**: Correct across 80%+ question formats
