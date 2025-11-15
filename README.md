@@ -1,6 +1,6 @@
 # Blank App!
 
-Upload any study material and master it through adaptive, active engagement. Guaranteed  accuracy and  recall.
+Upload any study material and learn it through adaptive, active engagement. Guaranteed  accuracy and  recall.
 
 ## Features
 
