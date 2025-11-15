@@ -1,4 +1,4 @@
-# Mastery Machine
+# Blank App!
 
 Upload any study material and master it through adaptive, active engagement. Guaranteed  accuracy and  recall.
 
@@ -6,9 +6,9 @@ Upload any study material and master it through adaptive, active engagement. Gua
 
 - **PDF Upload**: Supports any PDF study material (textbooks, notes, papers)
 - **AI Concept Extraction**: Automatically extracts testable concepts using GPT-4
-- **12 Engagement Modes**: From foundation building to mastery validation
+- **12 Engagement Modes**: From foundation building to  validation
 - **Adaptive Mode Switching**: Detects anxiety and adjusts difficulty in real-time
-- **5-Criteria Mastery Detection**:
+- **5-Criteria  Detection**:
   1. accuracy
   3. 10 consecutive perfect answers
   4. Speed/fluency (fast recall without hesitation)
@@ -18,7 +18,7 @@ Upload any study material and master it through adaptive, active engagement. Gua
 ## Architecture
 
 ```
-mastery-machine/
+
 ├── backend/          # FastAPI + SQLAlchemy
 │   ├── main.py              # API endpoints and WebSocket
 │   ├── models.py            # Database models
@@ -65,12 +65,12 @@ sudo systemctl start postgresql
 
 2. Create database:
 ```bash
-createdb mastery_machine
+createdb 
 ```
 
 3. Initialize schema:
 ```bash
-psql mastery_machine < database/schema.sql
+psql  < database/schema.sql
 ```
 
 ### Backend Setup
@@ -88,7 +88,7 @@ cp .env.example .env
 
 3. Edit `.env` with your credentials:
 ```env
-DATABASE_URL=postgresql://username:password@localhost:5432/mastery_machine
+DATABASE_URL=
 OPENAI_API_KEY=your_openai_api_key_here
 ```
 
@@ -125,9 +125,9 @@ Frontend runs on http://localhost:5173
 4. Start learning session
 5. Answer questions adaptively
    - System detects anxiety and switches to easier modes
-   - Tracks 5 mastery criteria in real-time
+   -
    - Provides immediate feedback
-6. Achieve mastery when all criteria are met
+6.
 7. View progress and statistics
 
 ## How It Works
@@ -135,11 +135,11 @@ Frontend runs on http://localhost:5173
 ### Mode-Switching Algorithm (Priority Cascade)
 
 1. **RESCUE**: Detect anxiety (skip rate > 30%) → MICRO_WINS mode
-2. **MASTERY VALIDATION**: Concepts meeting criteria 1-4 → MASTERY_VALIDATION
+2. ** VALIDATION**: Concepts meeting criteria 1-4 →
 3. **OPTIMAL CHALLENGE**: Select concept at appropriate difficulty
 4. **MODE SELECTION**: Choose mode based on concept state
 
-### Mastery Criteria
+### Criteria
 
 Each concept must meet ALL 5 criteria:
 
@@ -166,9 +166,9 @@ Each concept must meet ALL 5 criteria:
 - REVERSE_ENGINEER: Work backward from answer
 - SPOT_ERROR: Find mistakes in examples
 
-**Mastery** (validation):
+**** (validation):
 - BUILD_MAP: Show concept relationships
-- MASTERY_VALIDATION: Final verification
+- : Final verification
 - MICRO_WINS: Rescue mode for anxiety
 
 ## API Endpoints
@@ -198,7 +198,7 @@ GET    /api/users/{id}/progress      - Get user progress
 {"type": "question", "mode": "RAPID_FIRE", "question": "...", "data": {...}}
 {"type": "feedback", "correct": true, "explanation": "...", "mastered": false}
 {"type": "mode_switch", "new_mode": "COLLABORATIVE", "reason": "..."}
-{"type": "mastery", "concept": "...", "mastered": true}
+{"type": "", "concept": "...", "mastered": true}
 {"type": "session_complete", "stats": {...}}
 ```
 
