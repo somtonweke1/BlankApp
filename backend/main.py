@@ -475,6 +475,13 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
                 # Send next question
                 question_data = await engine.get_next_question()
+                if not question_data:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "No more questions available. Please upload a longer document."
+                    })
+                    await websocket.close()
+                    break
                 await websocket.send_json(question_data)
 
             elif data["type"] == "skip":
@@ -482,6 +489,13 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 await websocket.send_json(result)
 
                 question_data = await engine.get_next_question()
+                if not question_data:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "No more questions available."
+                    })
+                    await websocket.close()
+                    break
                 await websocket.send_json(question_data)
 
             elif data["type"] == "peek":

@@ -178,11 +178,16 @@ Example:
         Creates basic questions from concept definitions
         """
         for concept in concepts:
-            # Generate simple questions for key modes
+            # Generate multiple questions per concept to ensure enough practice
             modes_and_questions = [
                 {
                     'mode': 'RAPID_FIRE',
                     'question': f"What is {concept.name}?",
+                    'answer': concept.definition[:200] if concept.definition else concept.full_name
+                },
+                {
+                    'mode': 'RAPID_FIRE',
+                    'question': f"Define {concept.name}",
                     'answer': concept.definition[:200] if concept.definition else concept.full_name
                 },
                 {
@@ -191,9 +196,29 @@ Example:
                     'answer': concept.definition[:300] if concept.definition else concept.full_name
                 },
                 {
+                    'mode': 'GUIDED_SOLVE',
+                    'question': f"Describe what you know about {concept.name}",
+                    'answer': concept.definition[:300] if concept.definition else concept.full_name
+                },
+                {
                     'mode': 'EXPLAIN_BACK',
                     'question': f"How would you describe {concept.name}?",
                     'answer': concept.definition[:250] if concept.definition else concept.full_name
+                },
+                {
+                    'mode': 'EXPLAIN_BACK',
+                    'question': f"In simple terms, what is {concept.name}?",
+                    'answer': concept.definition[:250] if concept.definition else concept.full_name
+                },
+                {
+                    'mode': 'FILL_STORY',
+                    'question': f"Complete: {concept.name} is ___",
+                    'answer': concept.definition[:150] if concept.definition else concept.full_name
+                },
+                {
+                    'mode': 'COLLABORATIVE',
+                    'question': f"Let's discuss {concept.name}. What comes to mind?",
+                    'answer': concept.definition[:300] if concept.definition else concept.full_name
                 }
             ]
 
