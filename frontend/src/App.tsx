@@ -27,13 +27,31 @@ function App() {
   const startSession = async (materialId: string, _filename: string, _totalConcepts: number, uid: string) => {
     try {
       console.log('Starting session with:', { materialId, uid })
-      const response = await fetch(`${API_URL}/api/sessions/start/${materialId}?user_id=${uid}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
 
-      if (!response.ok) {
-        const errorText = await response.text()
+      // Retry logic for Render free tier cold starts
+      let response
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 60000)
+
+          response = await fetch(`${API_URL}/api/sessions/start/${materialId}?user_id=${uid}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal
+          })
+
+          clearTimeout(timeoutId)
+          break
+        } catch (error) {
+          if (attempt === 3) throw error
+          console.log(`Retry ${attempt}/3...`)
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+      }
+
+      if (!response || !response.ok) {
+        const errorText = response ? await response.text() : 'No response'
         console.error('Session start failed:', errorText)
         throw new Error(`Failed to start session: ${errorText}`)
       }

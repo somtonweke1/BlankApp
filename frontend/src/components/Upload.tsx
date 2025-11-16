@@ -24,6 +24,31 @@ function Upload({ onUploadComplete }: UploadProps) {
     }
   }
 
+  const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 3) => {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 second timeout
+
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal
+        })
+
+        clearTimeout(timeoutId)
+        return response
+      } catch (error) {
+        if (i === maxRetries - 1) throw error
+
+        const waitTime = Math.min(1000 * Math.pow(2, i), 10000) // Exponential backoff, max 10s
+        console.log(`Retry ${i + 1}/${maxRetries} after ${waitTime}ms...`)
+        setProgress(`Server is waking up... (attempt ${i + 2}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+      }
+    }
+    throw new Error('Max retries exceeded')
+  }
+
   const handleUpload = async () => {
     if (!email || !file) {
       alert('Please enter email and select a file')
@@ -31,11 +56,16 @@ function Upload({ onUploadComplete }: UploadProps) {
     }
 
     setUploading(true)
-    setProgress('Creating user account...')
+    setProgress('Waking up server (free tier - may take 30-60 seconds)...')
 
     try {
+      // Wake up backend first
+      setProgress('Connecting to server...')
+      await fetchWithRetry(`${API_URL}/`, { method: 'GET' })
+
       // Create user
-      const userResponse = await fetch(`${API_URL}/api/users`, {
+      setProgress('Creating user account...')
+      const userResponse = await fetchWithRetry(`${API_URL}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
@@ -57,7 +87,7 @@ function Upload({ onUploadComplete }: UploadProps) {
 
       setProcessing(true)
 
-      const uploadResponse = await fetch(`${API_URL}/api/upload`, {
+      const uploadResponse = await fetchWithRetry(`${API_URL}/api/upload`, {
         method: 'POST',
         body: formData
       })
