@@ -235,62 +235,72 @@ Example:
         print(f"GENERATING QUESTIONS for {len(concepts)} concepts")
 
         for concept in concepts:
-            # Get first 50 chars of definition for short answers
-            short_def = (concept.definition[:50] + "...") if concept.definition and len(concept.definition) > 50 else (concept.definition or concept.full_name)
-            med_def = (concept.definition[:200]) if concept.definition else concept.full_name
-            long_def = (concept.definition[:300]) if concept.definition else concept.full_name
+            # Get definition text
+            full_def = concept.definition or concept.full_name or "No definition available"
+            name = concept.name or "Concept"
 
-            # Generate questions for ALL modes to ensure continuous flow
+            # Split definition into sentences for varied answers
+            sentences = [s.strip() + '.' for s in full_def.split('.') if s.strip()]
+            if not sentences:
+                sentences = [full_def]
+
+            # Create varied answers based on definition parts
+            def get_answer_part(index, default):
+                if index < len(sentences):
+                    return sentences[index]
+                return default
+
+            # Generate questions with UNIQUE answers for each
             modes_and_questions = [
-                # RAPID_FIRE - Quick recall (6 questions)
-                {'mode': 'RAPID_FIRE', 'question': f"What is {concept.name}?", 'answer': short_def},
-                {'mode': 'RAPID_FIRE', 'question': f"Define {concept.name}", 'answer': short_def},
-                {'mode': 'RAPID_FIRE', 'question': f"{concept.name} is:", 'answer': short_def},
-                {'mode': 'RAPID_FIRE', 'question': f"Recall: {concept.name}", 'answer': short_def},
-                {'mode': 'RAPID_FIRE', 'question': f"What does {concept.name} mean?", 'answer': short_def},
-                {'mode': 'RAPID_FIRE', 'question': f"Quick: {concept.name}?", 'answer': short_def},
+                # RAPID_FIRE - Each question has specific answer
+                {'mode': 'RAPID_FIRE', 'question': f"What is {name}?", 'answer': full_def[:150]},
+                {'mode': 'RAPID_FIRE', 'question': f"Define {name}", 'answer': get_answer_part(0, full_def[:100])},
+                {'mode': 'RAPID_FIRE', 'question': f"{name} is:", 'answer': get_answer_part(1, full_def[:100])},
+                {'mode': 'RAPID_FIRE', 'question': f"Recall: {name}", 'answer': concept.full_name or full_def[:80]},
+                {'mode': 'RAPID_FIRE', 'question': f"What does {name} mean?", 'answer': full_def[:120]},
+                {'mode': 'RAPID_FIRE', 'question': f"Quick: {name}?", 'answer': get_answer_part(0, name)},
 
-                # GUIDED_SOLVE - Step by step (4 questions)
-                {'mode': 'GUIDED_SOLVE', 'question': f"Explain {concept.name} in your own words", 'answer': med_def},
-                {'mode': 'GUIDED_SOLVE', 'question': f"Describe what you know about {concept.name}", 'answer': long_def},
-                {'mode': 'GUIDED_SOLVE', 'question': f"Walk me through {concept.name}", 'answer': long_def},
-                {'mode': 'GUIDED_SOLVE', 'question': f"Break down {concept.name}", 'answer': long_def},
+                # GUIDED_SOLVE - Progressive explanations
+                {'mode': 'GUIDED_SOLVE', 'question': f"Explain {name} in your own words", 'answer': f"{name} is a concept that involves {full_def[:200]}"},
+                {'mode': 'GUIDED_SOLVE', 'question': f"Describe what you know about {name}", 'answer': f"Key points about {name}: {full_def[:250]}"},
+                {'mode': 'GUIDED_SOLVE', 'question': f"Walk me through {name}", 'answer': f"Understanding {name}: {full_def[:200]}"},
+                {'mode': 'GUIDED_SOLVE', 'question': f"Break down {name}", 'answer': f"Let's break down {name}: {' '.join(sentences[:2]) if len(sentences) > 1 else full_def[:200]}"},
 
-                # COLLABORATIVE - Discussion style (3 questions)
-                {'mode': 'COLLABORATIVE', 'question': f"Let's discuss {concept.name}. What comes to mind?", 'answer': long_def},
-                {'mode': 'COLLABORATIVE', 'question': f"What do you think about {concept.name}?", 'answer': long_def},
-                {'mode': 'COLLABORATIVE', 'question': f"Tell me what you understand about {concept.name}", 'answer': long_def},
+                # COLLABORATIVE - Discussion angles
+                {'mode': 'COLLABORATIVE', 'question': f"Let's discuss {name}. What comes to mind?", 'answer': f"When thinking about {name}, consider: {full_def[:200]}"},
+                {'mode': 'COLLABORATIVE', 'question': f"What do you think about {name}?", 'answer': f"{name} is important because {full_def[:180]}"},
+                {'mode': 'COLLABORATIVE', 'question': f"Tell me what you understand about {name}", 'answer': f"My understanding of {name}: {full_def[:220]}"},
 
-                # EXPLAIN_BACK - Deep understanding (4 questions)
-                {'mode': 'EXPLAIN_BACK', 'question': f"How would you describe {concept.name}?", 'answer': med_def},
-                {'mode': 'EXPLAIN_BACK', 'question': f"In simple terms, what is {concept.name}?", 'answer': med_def},
-                {'mode': 'EXPLAIN_BACK', 'question': f"Teach me about {concept.name}", 'answer': long_def},
-                {'mode': 'EXPLAIN_BACK', 'question': f"Explain {concept.name} as if I'm new to this", 'answer': long_def},
+                # EXPLAIN_BACK - Different explanation styles
+                {'mode': 'EXPLAIN_BACK', 'question': f"How would you describe {name}?", 'answer': f"I would describe {name} as {full_def[:180]}"},
+                {'mode': 'EXPLAIN_BACK', 'question': f"In simple terms, what is {name}?", 'answer': f"Simply put, {name} is {get_answer_part(0, full_def[:150])}"},
+                {'mode': 'EXPLAIN_BACK', 'question': f"Teach me about {name}", 'answer': f"Let me teach you about {name}: {full_def[:220]}"},
+                {'mode': 'EXPLAIN_BACK', 'question': f"Explain {name} as if I'm new to this", 'answer': f"If you're new, {name} basically means {get_answer_part(0, full_def[:160])}"},
 
-                # FILL_STORY - Fill in blanks (4 questions)
-                {'mode': 'FILL_STORY', 'question': f"Complete: {concept.name} is ___", 'answer': short_def},
-                {'mode': 'FILL_STORY', 'question': f"Fill in: {concept.name} refers to ___", 'answer': short_def},
-                {'mode': 'FILL_STORY', 'question': f"{concept.name} means ___", 'answer': short_def},
-                {'mode': 'FILL_STORY', 'question': f"The definition of {concept.name} is ___", 'answer': med_def},
+                # FILL_STORY - Different completion prompts
+                {'mode': 'FILL_STORY', 'question': f"Complete: {name} is ___", 'answer': get_answer_part(0, full_def[:100])},
+                {'mode': 'FILL_STORY', 'question': f"Fill in: {name} refers to ___", 'answer': get_answer_part(1, full_def[:120])},
+                {'mode': 'FILL_STORY', 'question': f"{name} means ___", 'answer': full_def[:100]},
+                {'mode': 'FILL_STORY', 'question': f"The definition of {name} is ___", 'answer': full_def[:150]},
 
-                # NUMBER_SWAP - Application (3 questions)
-                {'mode': 'NUMBER_SWAP', 'question': f"Give an example of {concept.name}", 'answer': med_def},
-                {'mode': 'NUMBER_SWAP', 'question': f"How would you apply {concept.name}?", 'answer': med_def},
-                {'mode': 'NUMBER_SWAP', 'question': f"Where do you see {concept.name} used?", 'answer': med_def},
+                # NUMBER_SWAP - Application contexts
+                {'mode': 'NUMBER_SWAP', 'question': f"Give an example of {name}", 'answer': f"An example of {name} would be: {full_def[:150]}"},
+                {'mode': 'NUMBER_SWAP', 'question': f"How would you apply {name}?", 'answer': f"You can apply {name} by understanding that {full_def[:180]}"},
+                {'mode': 'NUMBER_SWAP', 'question': f"Where do you see {name} used?", 'answer': f"{name} is used in contexts where {full_def[:160]}"},
 
-                # SPOT_ERROR - Critical thinking (3 questions)
-                {'mode': 'SPOT_ERROR', 'question': f"What's a common misconception about {concept.name}?", 'answer': med_def},
-                {'mode': 'SPOT_ERROR', 'question': f"What's wrong with this: '{concept.name} is simple'?", 'answer': f"This oversimplifies it. {med_def}"},
-                {'mode': 'SPOT_ERROR', 'question': f"Identify issues in understanding {concept.name}", 'answer': med_def},
+                # SPOT_ERROR - Different error types
+                {'mode': 'SPOT_ERROR', 'question': f"What's a common misconception about {name}?", 'answer': f"A common misconception is oversimplifying {name}. Actually, {full_def[:180]}"},
+                {'mode': 'SPOT_ERROR', 'question': f"What's wrong with saying '{name} is simple'?", 'answer': f"This oversimplifies it. {name} actually involves {full_def[:160]}"},
+                {'mode': 'SPOT_ERROR', 'question': f"Identify issues in understanding {name}", 'answer': f"Key issues: {name} requires understanding that {full_def[:170]}"},
 
-                # BUILD_MAP - Connections (2 questions)
-                {'mode': 'BUILD_MAP', 'question': f"How does {concept.name} relate to other concepts?", 'answer': long_def},
-                {'mode': 'BUILD_MAP', 'question': f"What connects to {concept.name}?", 'answer': long_def},
+                # BUILD_MAP - Relationship types
+                {'mode': 'BUILD_MAP', 'question': f"How does {name} relate to other concepts?", 'answer': f"{name} relates to other concepts through {full_def[:200]}"},
+                {'mode': 'BUILD_MAP', 'question': f"What connects to {name}?", 'answer': f"Connections to {name} include understanding {full_def[:180]}"},
 
-                # MICRO_WINS - Easy wins (3 questions)
-                {'mode': 'MICRO_WINS', 'question': f"True or False: {concept.name} is important", 'answer': "True"},
-                {'mode': 'MICRO_WINS', 'question': f"Have you heard of {concept.name}?", 'answer': "Yes"},
-                {'mode': 'MICRO_WINS', 'question': f"Can you recognize {concept.name}?", 'answer': short_def},
+                # MICRO_WINS - Easy confidence builders
+                {'mode': 'MICRO_WINS', 'question': f"True or False: {name} is important", 'answer': "True - it's a key concept"},
+                {'mode': 'MICRO_WINS', 'question': f"Have you heard of {name}?", 'answer': f"Yes, {name} is {get_answer_part(0, 'an important concept')}"},
+                {'mode': 'MICRO_WINS', 'question': f"Can you recognize {name}?", 'answer': f"Yes, {name} can be recognized as {full_def[:100]}"},
             ]
 
             print(f"  Creating {len(modes_and_questions)} questions for: {concept.name[:60]}")
