@@ -84,6 +84,9 @@ class EngagementEngine:
         self.current_mode: Optional[str] = None
         self.sequence_number = 0
 
+        # Track asked questions to avoid repeats
+        self.asked_question_ids = set()
+
         # Session stats
         self.session = self.db.query(SessionModel).filter(
             SessionModel.id == self.session_id
@@ -472,23 +475,61 @@ class EngagementEngine:
 
     async def _build_question(self) -> Dict:
         """Build question data to send to client"""
-        # Get random question for this concept+mode
-        question = self.db.query(Question).filter(
+        # Get random question for this concept+mode, excluding already asked
+        question_query = self.db.query(Question).filter(
             Question.concept_id == self.current_concept.id,
             Question.mode == self.current_mode
-        ).order_by(func.random()).first()
+        )
 
+        # Exclude already asked questions
+        if self.asked_question_ids:
+            question_query = question_query.filter(
+                ~Question.id.in_(self.asked_question_ids)
+            )
+
+        question = question_query.order_by(func.random()).first()
+
+        # If no new questions available for this mode, try fallback
         if not question:
-            print(f"WARNING: No question found for mode '{self.current_mode}', falling back to any question for concept {self.current_concept.id}")
-            # Fallback - use any question for this concept
-            question = self.db.query(Question).filter(
-                Question.concept_id == self.current_concept.id
-            ).order_by(func.random()).first()
+            # Check if we've exhausted all questions for this concept+mode
+            total_for_mode = self.db.query(Question).filter(
+                Question.concept_id == self.current_concept.id,
+                Question.mode == self.current_mode
+            ).count()
+
+            if total_for_mode > 0:
+                # We've asked all questions for this mode - reset tracking for this concept
+                print(f"All questions asked for {self.current_concept.name} in {self.current_mode} mode. Resetting...")
+                # Remove this concept's questions from tracking
+                concept_question_ids = {
+                    q.id for q in self.db.query(Question).filter(
+                        Question.concept_id == self.current_concept.id
+                    ).all()
+                }
+                self.asked_question_ids -= concept_question_ids
+
+                # Try again
+                question = self.db.query(Question).filter(
+                    Question.concept_id == self.current_concept.id,
+                    Question.mode == self.current_mode
+                ).order_by(func.random()).first()
+
+            # If still no question, try any mode for this concept
+            if not question:
+                print(f"WARNING: No question found for mode '{self.current_mode}', falling back to any question for concept {self.current_concept.id}")
+                question = self.db.query(Question).filter(
+                    Question.concept_id == self.current_concept.id,
+                    ~Question.id.in_(self.asked_question_ids) if self.asked_question_ids else True
+                ).order_by(func.random()).first()
 
         if not question:
             # No questions at all for this concept - critical error
             print(f"CRITICAL ERROR: No questions found for concept {self.current_concept.id} - {self.current_concept.name}")
             return None
+
+        # Track this question as asked
+        self.asked_question_ids.add(question.id)
+        print(f"Selected question ID {question.id} (Total asked: {len(self.asked_question_ids)})")
 
         # Use the question's actual mode if we fell back
         actual_mode = question.mode
