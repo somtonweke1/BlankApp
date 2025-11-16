@@ -157,6 +157,11 @@ function LearningSession({ sessionId, filename, totalConcepts, onComplete }: Lea
         onComplete()
         break
 
+      case 'error':
+        console.error('Server error:', message)
+        alert(`Error: ${(message as any).message || 'Unknown error occurred'}`)
+        break
+
       default:
         console.log('Unknown message type:', message)
     }
