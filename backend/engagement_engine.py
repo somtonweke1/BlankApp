@@ -143,11 +143,30 @@ class EngagementEngine:
             'stats': dict
         }
         """
-        # Get question
+        # Get question - try for specific mode first, then fallback
         question = self.db.query(Question).filter(
             Question.concept_id == self.current_concept.id,
             Question.mode == self.current_mode
         ).first()
+
+        if not question:
+            # Fallback to any question for this concept
+            print(f"WARNING: No question found for mode '{self.current_mode}', using any available question")
+            question = self.db.query(Question).filter(
+                Question.concept_id == self.current_concept.id
+            ).first()
+
+        if not question:
+            # This shouldn't happen, but handle gracefully
+            print(f"CRITICAL: No questions found for concept {self.current_concept.id}")
+            return {
+                'correct': False,
+                'explanation': "System error: Unable to verify answer. Please continue.",
+                'mastered': False,
+                'concept_name': self.current_concept.name,
+                'mode_switched': False,
+                'session_complete': False
+            }
 
         # Evaluate answer
         is_correct, is_partial = await self._evaluate_answer(answer, question)
@@ -239,6 +258,19 @@ class EngagementEngine:
             Question.mode == self.current_mode
         ).first()
 
+        if not question:
+            # Fallback to any question for this concept
+            question = self.db.query(Question).filter(
+                Question.concept_id == self.current_concept.id
+            ).first()
+
+        if not question:
+            return {
+                'type': 'peek',
+                'answer': self.current_concept.definition or "No definition available",
+                'explanation': 'Here is the concept definition.'
+            }
+
         response = Response(
             user_id=self.user_id,
             concept_id=self.current_concept.id,
@@ -266,6 +298,18 @@ class EngagementEngine:
             Question.concept_id == self.current_concept.id,
             Question.mode == self.current_mode
         ).first()
+
+        if not question:
+            # Fallback to any question for this concept
+            question = self.db.query(Question).filter(
+                Question.concept_id == self.current_concept.id
+            ).first()
+
+        if not question:
+            return {
+                'type': 'hint',
+                'hint': f"This relates to {self.current_concept.name}"
+            }
 
         # Generate hint (first part of answer or related concept)
         hint = self._generate_hint(question)
@@ -435,22 +479,27 @@ class EngagementEngine:
         ).order_by(func.random()).first()
 
         if not question:
-            # Fallback - generate on the fly or use different mode
+            print(f"WARNING: No question found for mode '{self.current_mode}', falling back to any question for concept {self.current_concept.id}")
+            # Fallback - use any question for this concept
             question = self.db.query(Question).filter(
                 Question.concept_id == self.current_concept.id
-            ).first()
+            ).order_by(func.random()).first()
 
         if not question:
-            # No questions generated for this concept - critical error
+            # No questions at all for this concept - critical error
+            print(f"CRITICAL ERROR: No questions found for concept {self.current_concept.id} - {self.current_concept.name}")
             return None
+
+        # Use the question's actual mode if we fell back
+        actual_mode = question.mode
 
         return {
             'type': 'question',
-            'mode': self.current_mode,
+            'mode': actual_mode,
             'concept_name': self.current_concept.name,
             'question': question.question_text,
             'difficulty': question.difficulty,
-            'data': question.question_data
+            'data': question.question_data or {}
         }
 
     async def _evaluate_answer(self, user_answer: str, question: Question) -> tuple:

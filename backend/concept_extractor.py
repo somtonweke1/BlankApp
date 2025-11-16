@@ -229,52 +229,71 @@ Example:
     async def generate_questions(self, concepts: List[Concept], db: Session):
         """
         Generate questions for each concept - SIMPLE MODE (no AI)
-        Creates basic questions from concept definitions
+        Creates questions for ALL modes the engagement engine uses
         """
+        print(f"=" * 60)
+        print(f"GENERATING QUESTIONS for {len(concepts)} concepts")
+
         for concept in concepts:
-            # Generate multiple questions per concept to ensure enough practice
+            # Get first 50 chars of definition for short answers
+            short_def = (concept.definition[:50] + "...") if concept.definition and len(concept.definition) > 50 else (concept.definition or concept.full_name)
+            med_def = (concept.definition[:200]) if concept.definition else concept.full_name
+            long_def = (concept.definition[:300]) if concept.definition else concept.full_name
+
+            # Generate questions for ALL modes to ensure continuous flow
             modes_and_questions = [
-                {
-                    'mode': 'RAPID_FIRE',
-                    'question': f"What is {concept.name}?",
-                    'answer': concept.definition[:200] if concept.definition else concept.full_name
-                },
-                {
-                    'mode': 'RAPID_FIRE',
-                    'question': f"Define {concept.name}",
-                    'answer': concept.definition[:200] if concept.definition else concept.full_name
-                },
-                {
-                    'mode': 'GUIDED_SOLVE',
-                    'question': f"Explain {concept.name} in your own words",
-                    'answer': concept.definition[:300] if concept.definition else concept.full_name
-                },
-                {
-                    'mode': 'GUIDED_SOLVE',
-                    'question': f"Describe what you know about {concept.name}",
-                    'answer': concept.definition[:300] if concept.definition else concept.full_name
-                },
-                {
-                    'mode': 'EXPLAIN_BACK',
-                    'question': f"How would you describe {concept.name}?",
-                    'answer': concept.definition[:250] if concept.definition else concept.full_name
-                },
-                {
-                    'mode': 'EXPLAIN_BACK',
-                    'question': f"In simple terms, what is {concept.name}?",
-                    'answer': concept.definition[:250] if concept.definition else concept.full_name
-                },
-                {
-                    'mode': 'FILL_STORY',
-                    'question': f"Complete: {concept.name} is ___",
-                    'answer': concept.definition[:150] if concept.definition else concept.full_name
-                },
-                {
-                    'mode': 'COLLABORATIVE',
-                    'question': f"Let's discuss {concept.name}. What comes to mind?",
-                    'answer': concept.definition[:300] if concept.definition else concept.full_name
-                }
+                # RAPID_FIRE - Quick recall (6 questions)
+                {'mode': 'RAPID_FIRE', 'question': f"What is {concept.name}?", 'answer': short_def},
+                {'mode': 'RAPID_FIRE', 'question': f"Define {concept.name}", 'answer': short_def},
+                {'mode': 'RAPID_FIRE', 'question': f"{concept.name} is:", 'answer': short_def},
+                {'mode': 'RAPID_FIRE', 'question': f"Recall: {concept.name}", 'answer': short_def},
+                {'mode': 'RAPID_FIRE', 'question': f"What does {concept.name} mean?", 'answer': short_def},
+                {'mode': 'RAPID_FIRE', 'question': f"Quick: {concept.name}?", 'answer': short_def},
+
+                # GUIDED_SOLVE - Step by step (4 questions)
+                {'mode': 'GUIDED_SOLVE', 'question': f"Explain {concept.name} in your own words", 'answer': med_def},
+                {'mode': 'GUIDED_SOLVE', 'question': f"Describe what you know about {concept.name}", 'answer': long_def},
+                {'mode': 'GUIDED_SOLVE', 'question': f"Walk me through {concept.name}", 'answer': long_def},
+                {'mode': 'GUIDED_SOLVE', 'question': f"Break down {concept.name}", 'answer': long_def},
+
+                # COLLABORATIVE - Discussion style (3 questions)
+                {'mode': 'COLLABORATIVE', 'question': f"Let's discuss {concept.name}. What comes to mind?", 'answer': long_def},
+                {'mode': 'COLLABORATIVE', 'question': f"What do you think about {concept.name}?", 'answer': long_def},
+                {'mode': 'COLLABORATIVE', 'question': f"Tell me what you understand about {concept.name}", 'answer': long_def},
+
+                # EXPLAIN_BACK - Deep understanding (4 questions)
+                {'mode': 'EXPLAIN_BACK', 'question': f"How would you describe {concept.name}?", 'answer': med_def},
+                {'mode': 'EXPLAIN_BACK', 'question': f"In simple terms, what is {concept.name}?", 'answer': med_def},
+                {'mode': 'EXPLAIN_BACK', 'question': f"Teach me about {concept.name}", 'answer': long_def},
+                {'mode': 'EXPLAIN_BACK', 'question': f"Explain {concept.name} as if I'm new to this", 'answer': long_def},
+
+                # FILL_STORY - Fill in blanks (4 questions)
+                {'mode': 'FILL_STORY', 'question': f"Complete: {concept.name} is ___", 'answer': short_def},
+                {'mode': 'FILL_STORY', 'question': f"Fill in: {concept.name} refers to ___", 'answer': short_def},
+                {'mode': 'FILL_STORY', 'question': f"{concept.name} means ___", 'answer': short_def},
+                {'mode': 'FILL_STORY', 'question': f"The definition of {concept.name} is ___", 'answer': med_def},
+
+                # NUMBER_SWAP - Application (3 questions)
+                {'mode': 'NUMBER_SWAP', 'question': f"Give an example of {concept.name}", 'answer': med_def},
+                {'mode': 'NUMBER_SWAP', 'question': f"How would you apply {concept.name}?", 'answer': med_def},
+                {'mode': 'NUMBER_SWAP', 'question': f"Where do you see {concept.name} used?", 'answer': med_def},
+
+                # SPOT_ERROR - Critical thinking (3 questions)
+                {'mode': 'SPOT_ERROR', 'question': f"What's a common misconception about {concept.name}?", 'answer': med_def},
+                {'mode': 'SPOT_ERROR', 'question': f"What's wrong with this: '{concept.name} is simple'?", 'answer': f"This oversimplifies it. {med_def}"},
+                {'mode': 'SPOT_ERROR', 'question': f"Identify issues in understanding {concept.name}", 'answer': med_def},
+
+                # BUILD_MAP - Connections (2 questions)
+                {'mode': 'BUILD_MAP', 'question': f"How does {concept.name} relate to other concepts?", 'answer': long_def},
+                {'mode': 'BUILD_MAP', 'question': f"What connects to {concept.name}?", 'answer': long_def},
+
+                # MICRO_WINS - Easy wins (3 questions)
+                {'mode': 'MICRO_WINS', 'question': f"True or False: {concept.name} is important", 'answer': "True"},
+                {'mode': 'MICRO_WINS', 'question': f"Have you heard of {concept.name}?", 'answer': "Yes"},
+                {'mode': 'MICRO_WINS', 'question': f"Can you recognize {concept.name}?", 'answer': short_def},
             ]
+
+            print(f"  Creating {len(modes_and_questions)} questions for: {concept.name[:60]}")
 
             for q_data in modes_and_questions:
                 question = Question(
@@ -288,6 +307,8 @@ Example:
                 db.add(question)
 
         db.commit()
+        print(f"Questions generated successfully!")
+        print(f"=" * 60)
 
     async def _generate_mode_questions(self, concept: Concept, mode: str, count: int = 2) -> List[Dict]:
         """Generate questions for specific mode"""

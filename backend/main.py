@@ -13,7 +13,7 @@ from typing import Optional
 import json
 from pydantic import BaseModel
 
-from models import Base, User, Material, Session as SessionModel
+from models import Base, User, Material, Session as SessionModel, Concept, Question
 from pdf_processor import PDFProcessor
 from concept_extractor import ConceptExtractor
 from engagement_engine import EngagementEngine
@@ -98,7 +98,7 @@ async def root():
 async def create_demo_material(db: Session = Depends(get_db)):
     """Create demo material with sample concepts for testing"""
     # Get or create demo user
-    user = db.query(User).filter(User.email == "demo@masteryma chine.com").first()
+    user = db.query(User).filter(User.email == "demo@masterymachine.com").first()
     if not user:
         user = User(email="demo@masterymachine.com")
         db.add(user)
