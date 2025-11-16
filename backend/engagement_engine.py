@@ -87,6 +87,11 @@ class EngagementEngine:
         # Track asked questions to avoid repeats
         self.asked_question_ids = set()
 
+        # Track consecutive questions on same concept (prevent getting stuck)
+        self.consecutive_same_concept = 0
+        self.last_concept_id = None
+        self.MAX_CONSECUTIVE_PER_CONCEPT = 10  # Force concept change after this many questions
+
         # Session stats
         self.session = self.db.query(SessionModel).filter(
             SessionModel.id == self.session_id
@@ -97,7 +102,7 @@ class EngagementEngine:
         Main algorithm: Select next concept and mode
 
         Priority cascade:
-        1. RESCUE: Any concept in anxiety/panic state → MICRO_WINS
+        1. RESCUE: Any concept in anxiety/panic state → MICRO_WINS (unless stuck too long)
         2. MASTERY VALIDATION: Concepts ready for validation → MASTERY_VALIDATION
         3. OPTIMAL CHALLENGE: Select concept at optimal difficulty
         4. MODE SELECTION: Choose mode based on concept state
@@ -106,12 +111,19 @@ class EngagementEngine:
         if not self.concepts:
             return None  # No concepts extracted from material
 
-        # Step 1: Check for concepts needing rescue
-        rescue_concept = await self._find_rescue_concept()
-        if rescue_concept:
-            self.current_concept = rescue_concept
-            self.current_mode = 'MICRO_WINS'
-            return await self._build_question()
+        # Check if stuck on same concept for too long - force concept change
+        force_concept_change = False
+        if self.last_concept_id and self.consecutive_same_concept >= self.MAX_CONSECUTIVE_PER_CONCEPT:
+            force_concept_change = True
+            print(f"FORCE CONCEPT CHANGE: Stuck on concept for {self.consecutive_same_concept} questions")
+
+        # Step 1: Check for concepts needing rescue (unless forcing concept change)
+        if not force_concept_change:
+            rescue_concept = await self._find_rescue_concept()
+            if rescue_concept:
+                self.current_concept = rescue_concept
+                self.current_mode = 'MICRO_WINS'
+                return await self._build_question()
 
         # Step 2: Check for concepts ready for mastery validation
         validation_concept = await self._find_validation_concept()
@@ -121,7 +133,10 @@ class EngagementEngine:
             return await self._build_question()
 
         # Step 3: Select concept at optimal challenge level
-        self.current_concept = await self._select_optimal_concept()
+        # If forcing change, exclude current concept
+        self.current_concept = await self._select_optimal_concept(
+            exclude_concept_id=self.last_concept_id if force_concept_change else None
+        )
 
         # Step 4: Select appropriate mode for this concept
         self.current_mode = await self._select_mode()
@@ -379,7 +394,7 @@ class EngagementEngine:
 
         return None
 
-    async def _select_optimal_concept(self) -> Concept:
+    async def _select_optimal_concept(self, exclude_concept_id: Optional[uuid.UUID] = None) -> Concept:
         """
         Select concept at optimal difficulty level
 
@@ -387,6 +402,7 @@ class EngagementEngine:
         - Prioritize concepts not seen recently
         - Balance between learning and reviewing
         - Avoid mastered concepts unless review needed
+        - Optionally exclude a specific concept (to force variety)
         """
         # Get all concept states
         concept_states = {
@@ -400,6 +416,10 @@ class EngagementEngine:
         # Score each concept
         scores = []
         for concept in self.concepts:
+            # Skip excluded concept (to force variety)
+            if exclude_concept_id and concept.id == exclude_concept_id:
+                continue
+
             state = concept_states.get(concept.id)
 
             if state and state.state == 'mastered':
@@ -424,7 +444,13 @@ class EngagementEngine:
 
         if not scores:
             # All mastered and not due for review - session complete
+            # Or all concepts excluded
             if self.concepts:
+                # If we excluded something, return a different concept
+                if exclude_concept_id:
+                    other_concepts = [c for c in self.concepts if c.id != exclude_concept_id]
+                    if other_concepts:
+                        return random.choice(other_concepts)
                 return self.concepts[0]  # Return any
             return None  # No concepts available
 
@@ -529,7 +555,16 @@ class EngagementEngine:
 
         # Track this question as asked
         self.asked_question_ids.add(question.id)
-        print(f"Selected question ID {question.id} (Total asked: {len(self.asked_question_ids)})")
+
+        # Track consecutive questions on same concept
+        if self.last_concept_id == self.current_concept.id:
+            self.consecutive_same_concept += 1
+        else:
+            # Concept changed - reset counter
+            self.consecutive_same_concept = 1
+            self.last_concept_id = self.current_concept.id
+
+        print(f"Selected question ID {question.id} (Total asked: {len(self.asked_question_ids)}, Consecutive on '{self.current_concept.name}': {self.consecutive_same_concept})")
 
         # Use the question's actual mode if we fell back
         actual_mode = question.mode
