@@ -68,14 +68,14 @@ app = FastAPI(
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
 # Add common Vercel patterns
 ALLOWED_ORIGINS.extend([
+    "https://frontend-hxdhdepcy-somtonweke1s-projects.vercel.app",
     "https://*.vercel.app",
     "https://*.vercel.com",
 ])
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origins=["*"],  # Allow all origins for now
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
