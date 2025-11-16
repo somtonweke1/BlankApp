@@ -58,7 +58,12 @@ interface SkipRecorded {
   message: string
 }
 
-type Message = Question | Feedback | ModeSwitch | SessionComplete | Hint | Peek | SkipRecorded
+interface ErrorMessage {
+  type: 'error'
+  message: string
+}
+
+type Message = Question | Feedback | ModeSwitch | SessionComplete | Hint | Peek | SkipRecorded | ErrorMessage
 
 function LearningSession({ sessionId, filename, totalConcepts, onComplete }: LearningSessionProps) {
   const [ws, setWs] = useState<WebSocket | null>(null)
