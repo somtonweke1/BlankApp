@@ -63,10 +63,21 @@ class EngagementEngine:
         self.db = db
 
         # Load concepts for this material
+        print(f"=" * 60)
+        print(f"ENGAGEMENT ENGINE INIT for material_id: {self.material_id}")
         self.concepts = self.db.query(Concept).filter(
             Concept.material_id == self.material_id
         ).all()
         self.total_concepts = len(self.concepts)
+        print(f"Loaded {self.total_concepts} concepts from database")
+        if self.total_concepts > 0:
+            for i, concept in enumerate(self.concepts[:5], 1):
+                print(f"  [{i}] {concept.name[:60]}")
+            if self.total_concepts > 5:
+                print(f"  ... and {self.total_concepts - 5} more")
+        else:
+            print("WARNING: No concepts found in database!")
+        print(f"=" * 60)
 
         # Current state
         self.current_concept: Optional[Concept] = None

@@ -26,51 +26,105 @@ class ConceptExtractor:
         FALLBACK MODE: Simple text-based extraction (no AI needed)
         Splits text into paragraphs and creates concepts from each
         """
-        text = pdf_data['text']
+        print(f"=" * 60)
+        print(f"CONCEPT EXTRACTION STARTED for material_id: {material_id}")
+        print(f"PDF Data keys: {pdf_data.keys()}")
 
-        # Simple approach: Split by paragraphs and create concepts
-        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip() and len(p.strip()) > 50]
+        text = pdf_data.get('text', '')
+        print(f"Text length: {len(text)}")
+        print(f"Text preview (first 200 chars): {text[:200]}")
+
+        if not text or len(text.strip()) < 10:
+            print("WARNING: Minimal or no text content in PDF - creating dummy concept")
+            # Create a dummy concept so user can still test
+            dummy_concept = Concept(
+                material_id=material_id,
+                name="Sample Concept",
+                type="concept",
+                full_name="This is a sample concept for testing",
+                definition="The PDF you uploaded had no extractable text. This is a demo concept so you can still test the learning flow.",
+                context="Demo",
+                complexity=5,
+                domain="general"
+            )
+            db.add(dummy_concept)
+            db.flush()  # Ensure ID is generated
+            print(f"Created dummy concept with ID: {dummy_concept.id}")
+            db.commit()
+            print("Dummy concept committed to database")
+
+            # Verify it's in the database
+            verification = db.query(Concept).filter(Concept.material_id == material_id).count()
+            print(f"Verification: {verification} concepts in database for material_id {material_id}")
+
+            return [dummy_concept]
 
         all_concepts = []
 
-        # Create concepts from paragraphs
-        for i, paragraph in enumerate(paragraphs[:20]):  # Limit to 20 concepts
-            # Extract first sentence as name
-            sentences = paragraph.split('.')
-            first_sentence = sentences[0].strip() if sentences else paragraph[:50]
+        # Try splitting by double newlines (paragraphs)
+        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip() and len(p.strip()) > 30]
+        print(f"Found {len(paragraphs)} paragraphs (before limiting to 20)")
 
-            concept = Concept(
-                material_id=material_id,
-                name=f"Concept {i+1}: {first_sentence[:40]}",
-                type="concept",
-                full_name=first_sentence[:100],
-                definition=paragraph[:500],
-                context="From uploaded material",
-                complexity=min(i + 1, 10),
-                domain="general"
-            )
-            db.add(concept)
-            all_concepts.append(concept)
+        if paragraphs:
+            # Create concepts from paragraphs
+            for i, paragraph in enumerate(paragraphs[:20]):  # Limit to 20 concepts
+                # Extract first sentence as name
+                sentences = [s.strip() for s in paragraph.split('.') if s.strip()]
+                first_sentence = sentences[0] if sentences else paragraph[:50]
 
-        # If no paragraphs found, create concepts from sentences
+                concept = Concept(
+                    material_id=material_id,
+                    name=f"Concept {i+1}: {first_sentence[:40]}...",
+                    type="concept",
+                    full_name=first_sentence[:100],
+                    definition=paragraph[:500],
+                    context="From uploaded material",
+                    complexity=min(i + 1, 10),
+                    domain="general"
+                )
+                db.add(concept)
+                all_concepts.append(concept)
+                print(f"  [{i+1}] Added concept: {concept.name[:60]}")
+
+        # If no paragraphs found, split by single newlines or sentences
         if not all_concepts:
-            sentences = [s.strip() + '.' for s in text.split('.') if s.strip() and len(s.strip()) > 20]
+            print("No paragraphs found, trying sentences...")
+            # Try splitting by periods
+            sentences = [s.strip() for s in text.split('.') if s.strip() and len(s.strip()) > 20]
+
+            if not sentences:
+                # Last resort: split by any whitespace chunks
+                print("No sentences found, splitting by chunks...")
+                words = text.split()
+                chunk_size = 20
+                sentences = [' '.join(words[i:i+chunk_size]) for i in range(0, min(len(words), 200), chunk_size)]
 
             for i, sentence in enumerate(sentences[:20]):
                 concept = Concept(
                     material_id=material_id,
                     name=f"Topic {i+1}",
                     type="fact",
-                    full_name=sentence[:100],
-                    definition=sentence[:500],
+                    full_name=sentence[:100] if len(sentence) > 100 else sentence,
+                    definition=sentence[:500] if len(sentence) > 500 else sentence,
                     context="From uploaded material",
                     complexity=5,
                     domain="general"
                 )
                 db.add(concept)
                 all_concepts.append(concept)
+                print(f"  [{i+1}] Added concept from sentence: {concept.name[:60]}")
 
+        # Commit all concepts to database
+        print(f"Committing {len(all_concepts)} concepts to database...")
+        db.flush()  # Ensure IDs are generated
         db.commit()
+        print(f"Successfully committed {len(all_concepts)} concepts")
+
+        # Verify concepts are in database
+        verification_count = db.query(Concept).filter(Concept.material_id == material_id).count()
+        print(f"Verification: {verification_count} concepts in database for material_id {material_id}")
+        print(f"=" * 60)
+
         return all_concepts
 
     async def extract_concepts_with_ai(self, pdf_data: Dict, material_id: uuid.UUID, db: Session) -> List[Concept]:
