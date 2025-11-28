@@ -156,27 +156,35 @@ Be precise. Every claim should become its opposite."""
                 messages=[
                     {
                         "role": "system",
-                        "content": """You are a logical gap detector. Given an original statement and its logical opposite, identify:
-1. Logical inconsistencies or contradictions
-2. Missing assumptions that would make either version coherent
-3. Unstated dependencies or prerequisites
-4. Areas where the opposition reveals flaws in reasoning
-5. Edge cases not covered by either statement
+                        "content": """You are a Socratic gap detector helping students think critically. When given a statement and its opposite, identify logical gaps that reveal deeper questions.
 
-Return each gap as a JSON object with:
-- "type": category of gap (assumption, contradiction, edge_case, dependency, etc.)
-- "description": clear description of the gap
-- "location": which part of the statements it relates to
+For each gap, ask questions that help the student understand boundaries and conditions:
 
-Return only valid JSON array."""
+Gap Types:
+- "assumption": Unstated beliefs that must be true
+- "mechanism": How/why does X cause Y? What's missing?
+- "context": When/where is this true vs false?
+- "edge_case": Scenarios not covered by the statement
+- "comparison": Compared to what? By how much?
+- "evidence": What proof exists? How do we know?
+
+Description format: Use QUESTIONS that prompt thinking:
+✅ "HOW does X cause Y? What's the mechanism? Under what conditions?"
+✅ "When is this true vs NOT true? What context matters?"
+✅ "What assumptions must hold for this to work?"
+❌ "Mechanism unclear" (too vague)
+❌ "Missing context" (not helpful)
+
+Return JSON array of 2-4 most insightful gaps:
+[{"type": "mechanism", "description": "HOW does...", "location": "original"}]"""
                     },
                     {
                         "role": "user",
-                        "content": f"Original: {original}\n\nInverted: {inverted}\n\nIdentify logical gaps:"
+                        "content": f"Original: {original}\n\nInverted: {inverted}\n\nIdentify the most thought-provoking logical gaps (2-4):"
                     }
                 ],
-                temperature=0.4,
-                max_tokens=800
+                temperature=0.5,
+                max_tokens=1000
             )
 
             import json
@@ -199,16 +207,54 @@ Return only valid JSON array."""
             if re.search(rf'\b{word}\b', original, re.IGNORECASE):
                 gaps.append({
                     'type': 'absolute_statement',
-                    'description': f"The use of '{word}' suggests an absolute claim that may have exceptions",
+                    'description': f"Uses absolute term '{word}' - are there ANY exceptions? What conditions make this always/never true?",
                     'location': 'original'
                 })
 
         # Check for causal claims without stated mechanism
-        if ' by ' in original or ' because ' in original or ' due to ' in original:
+        causal_indicators = [
+            (' by ', 'by'),
+            (' because ', 'because'),
+            (' due to ', 'due to'),
+            (' causes ', 'causes'),
+            (' results in ', 'results in'),
+            (' leads to ', 'leads to')
+        ]
+
+        for phrase, keyword in causal_indicators:
+            if phrase in original.lower():
+                gaps.append({
+                    'type': 'causal_claim',
+                    'description': f"States that X causes Y ('{keyword}') - HOW does it cause this? What's the mechanism? What evidence supports this? Are there conditions where this doesn't happen?",
+                    'location': 'original'
+                })
+                break  # Only add one causal gap
+
+        # Check for comparative claims
+        comparative_words = ['better', 'worse', 'more', 'less', 'higher', 'lower', 'greater', 'smaller']
+        for word in comparative_words:
+            if re.search(rf'\b{word}\b', original, re.IGNORECASE):
+                gaps.append({
+                    'type': 'comparison',
+                    'description': f"Makes comparison ('{word}') - compared to WHAT? Under what conditions? By how much?",
+                    'location': 'original'
+                })
+                break  # Only add one comparison gap
+
+        # Check for claims without context
+        if len(original.split()) > 20 and ',' not in original and ' if ' not in original.lower() and ' when ' not in original.lower():
             gaps.append({
-                'type': 'causal_claim',
-                'description': "Causal relationship stated - mechanism or evidence may need clarification",
-                'location': 'original'
+                'type': 'missing_context',
+                'description': "Long statement without conditions - when is this true? When is it NOT true? What context matters?",
+                'location': 'both'
+            })
+
+        # If no gaps found, add a generic one to prompt thinking
+        if not gaps:
+            gaps.append({
+                'type': 'assumption',
+                'description': "What assumptions does this statement make? What would need to be true for both the original AND inverted to make sense in different contexts?",
+                'location': 'both'
             })
 
         return gaps
