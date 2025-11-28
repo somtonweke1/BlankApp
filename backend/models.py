@@ -185,3 +185,74 @@ class Session(Base):
 
     # Relationships
     user = relationship("User", back_populates="sessions")
+
+
+class InversionParagraph(Base):
+    """Stores paragraph inversion data for the dialectical learning mode."""
+    __tablename__ = 'inversion_paragraphs'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    material_id = Column(UUID(as_uuid=True), ForeignKey('materials.id', ondelete='CASCADE'))
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'))
+
+    # Content
+    paragraph_number = Column(Integer, nullable=False)
+    page_number = Column(Integer)
+    original_text = Column(Text, nullable=False)
+    inverted_text = Column(Text, nullable=False)
+
+    # Status
+    gaps_identified = Column(Boolean, default=False)
+    patch_created = Column(Boolean, default=False)
+
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    gaps = relationship("Gap", back_populates="inversion_paragraph", cascade="all, delete-orphan")
+    patches = relationship("Patch", back_populates="inversion_paragraph", cascade="all, delete-orphan")
+
+
+class Gap(Base):
+    """Logical gaps identified between original and inverted paragraphs."""
+    __tablename__ = 'gaps'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    inversion_paragraph_id = Column(UUID(as_uuid=True), ForeignKey('inversion_paragraphs.id', ondelete='CASCADE'))
+
+    # Gap details
+    gap_type = Column(String(100), nullable=False)  # assumption, contradiction, edge_case, etc.
+    description = Column(Text, nullable=False)
+    location = Column(String(50))  # 'original', 'inverted', or 'both'
+
+    # User interaction
+    resolved = Column(Boolean, default=False)
+
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    # Relationships
+    inversion_paragraph = relationship("InversionParagraph", back_populates="gaps")
+
+
+class Patch(Base):
+    """User-created patches that reconcile opposites and resolve gaps."""
+    __tablename__ = 'patches'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    inversion_paragraph_id = Column(UUID(as_uuid=True), ForeignKey('inversion_paragraphs.id', ondelete='CASCADE'))
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'))
+
+    # Patch content
+    patch_name = Column(String(255))
+    patch_description = Column(Text, nullable=False)
+    patch_type = Column(String(100))  # function, rule, principle, exception, etc.
+
+    # Innovation metadata
+    creativity_score = Column(Integer)  # 1-10 subjective rating by user
+    addresses_gaps = Column(JSONB, default=list)  # List of gap IDs this patch addresses
+
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    inversion_paragraph = relationship("InversionParagraph", back_populates="patches")

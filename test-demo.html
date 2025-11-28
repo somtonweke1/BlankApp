@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mastery Machine - Demo Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .status {
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            font-weight: 500;
+        }
+        .status.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .status.info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .status.warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 10px 10px 0;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-left: 4px solid #007bff;
+        }
+        .step h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Mastery Machine - Demo Test</h1>
+        <p>Test your app without uploading PDFs or configuring OpenAI!</p>
+
+        <div class="step">
+            <h3>Step 1: Check Backend Status</h3>
+            <button onclick="checkBackend()">Check Backend</button>
+            <div id="backend-status"></div>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Create Demo Material</h3>
+            <p>This creates sample Python concepts with questions (no OpenAI needed!)</p>
+            <button onclick="createDemo()" id="demo-btn">Create Demo Content</button>
+            <div id="demo-status"></div>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Start Learning Session</h3>
+            <p>Use the material_id and user_id from Step 2</p>
+            <button onclick="startSession()" id="session-btn" disabled>Start Learning Session</button>
+            <div id="session-status"></div>
+        </div>
+
+        <div class="step">
+            <h3>Step 4: Test on Your Frontend</h3>
+            <p id="frontend-link" style="display:none;">
+                Now go to your frontend and manually trigger a session with:<br>
+                <code id="session-url"></code>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'https://mastery-machine-backend.onrender.com';
+        let materialId = null;
+        let userId = null;
+        let sessionId = null;
+
+        async function checkBackend() {
+            const statusDiv = document.getElementById('backend-status');
+            statusDiv.innerHTML = '<div class="status info">Checking backend...</div>';
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/`);
+                const data = await response.json();
+
+                if (data.status === 'online') {
+                    const openaiStatus = data.openai_configured ?
+                        '<span style="color: green;">✓ Configured</span>' :
+                        '<span style="color: orange;">⚠ Not Configured (use demo mode)</span>';
+
+                    statusDiv.innerHTML = `
+                        <div class="status success">
+                            <strong>✓ Backend is Online!</strong><br>
+                            Version: ${data.version}<br>
+                            OpenAI: ${openaiStatus}
+                        </div>
+                    `;
+                } else {
+                    statusDiv.innerHTML = '<div class="status error">Backend returned unexpected status</div>';
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">✗ Backend Error: ${error.message}</div>`;
+            }
+        }
+
+        async function createDemo() {
+            const statusDiv = document.getElementById('demo-status');
+            const btn = document.getElementById('demo-btn');
+            btn.disabled = true;
+            statusDiv.innerHTML = '<div class="status info">Creating demo content...</div>';
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/demo/create`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    materialId = data.material_id;
+                    userId = data.user_id;
+
+                    statusDiv.innerHTML = `
+                        <div class="status success">
+                            <strong>✓ Demo Content Created!</strong><br>
+                            Material: ${data.filename}<br>
+                            Concepts: ${data.total_concepts}<br>
+                            <pre>Material ID: ${materialId}\nUser ID: ${userId}</pre>
+                        </div>
+                    `;
+
+                    document.getElementById('session-btn').disabled = false;
+                } else {
+                    statusDiv.innerHTML = `<div class="status error">✗ Error: ${JSON.stringify(data)}</div>`;
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">✗ Error: ${error.message}</div>`;
+                btn.disabled = false;
+            }
+        }
+
+        async function startSession() {
+            if (!materialId || !userId) {
+                alert('Please create demo content first!');
+                return;
+            }
+
+            const statusDiv = document.getElementById('session-status');
+            const btn = document.getElementById('session-btn');
+            btn.disabled = true;
+            statusDiv.innerHTML = '<div class="status info">Starting learning session...</div>';
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/sessions/start/${materialId}?user_id=${userId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    sessionId = data.session_id;
+
+                    statusDiv.innerHTML = `
+                        <div class="status success">
+                            <strong>✓ Session Started!</strong><br>
+                            Session ID: ${sessionId}<br>
+                            WebSocket URL: ${data.websocket_url}<br>
+                            Total Concepts: ${data.total_concepts}
+                        </div>
+                        <div class="status info" style="margin-top: 10px;">
+                            <strong>🎯 Now test the WebSocket connection!</strong><br>
+                            Open your browser console and connect to:<br>
+                            <code>new WebSocket("${data.websocket_url}")</code>
+                        </div>
+                    `;
+
+                    document.getElementById('frontend-link').style.display = 'block';
+                    document.getElementById('session-url').textContent = data.websocket_url;
+                } else {
+                    statusDiv.innerHTML = `<div class="status error">✗ Error: ${JSON.stringify(data)}</div>`;
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">✗ Error: ${error.message}</div>`;
+                btn.disabled = false;
+            }
+        }
+
+        // Auto-check backend on load
+        window.addEventListener('DOMContentLoaded', () => {
+            checkBackend();
+        });
+    </script>
+</body>
+</html>

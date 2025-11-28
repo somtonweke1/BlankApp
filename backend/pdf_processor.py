@@ -15,6 +15,68 @@ class PDFProcessor:
 
     def __init__(self):
         self.min_text_length = 50  # Minimum characters to consider text extraction successful
+        self.min_quality_score = 0.5  # Minimum ratio of readable text
+
+    def _is_readable_text(self, text: str) -> bool:
+        """
+        Check if extracted text is readable (not garbled/encoded)
+
+        Returns True if text appears to be valid readable content,
+        False if it looks like encoding garbage.
+        """
+        if not text or len(text) < 50:
+            return False
+
+        # Sample the text (first 2000 chars)
+        sample = text[:2000]
+
+        # Check for common encoding garbage indicators
+        garbage_indicators = [
+            '(cid:',      # CID font encoding
+            'cid:0',      # CID references
+            '+Bgtm',      # Shifted characters
+            '+CmU',       # Shifted characters
+            'SpUbi',      # Garbled text patterns
+            'sgdm',       # Shifted 'them'
+            'Hmspn',      # Shifted 'Intro'
+        ]
+
+        garbage_count = sum(1 for indicator in garbage_indicators if indicator in sample)
+        if garbage_count >= 2:
+            print(f"  [QUALITY CHECK] Found {garbage_count} garbage indicators - text is encoded")
+            return False
+
+        # Count readable words (common English words)
+        common_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been',
+                       'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+                       'could', 'should', 'may', 'might', 'must', 'shall', 'can',
+                       'of', 'to', 'in', 'for', 'on', 'with', 'at', 'by', 'from',
+                       'and', 'or', 'but', 'not', 'this', 'that', 'these', 'those',
+                       'it', 'its', 'we', 'you', 'they', 'he', 'she', 'them', 'their'}
+
+        words = sample.lower().split()
+        if len(words) < 10:
+            return False
+
+        common_word_count = sum(1 for word in words if word in common_words)
+        ratio = common_word_count / len(words)
+
+        print(f"  [QUALITY CHECK] Common word ratio: {ratio:.2%} ({common_word_count}/{len(words)} words)")
+
+        # If less than 5% common English words, it's probably garbage
+        if ratio < 0.05:
+            return False
+
+        # Check for excessive special characters
+        special_chars = sum(1 for c in sample if not c.isalnum() and c not in ' .,!?;:\'"()-\n')
+        special_ratio = special_chars / len(sample)
+
+        print(f"  [QUALITY CHECK] Special char ratio: {special_ratio:.2%}")
+
+        if special_ratio > 0.15:  # More than 15% special chars is suspicious
+            return False
+
+        return True
 
     def extract(self, file_path: str) -> Dict:
         """
@@ -29,15 +91,40 @@ class PDFProcessor:
             'extraction_method': str  # 'native' or 'ocr'
         }
         """
+        print(f"[PDF] Starting extraction for: {file_path}")
+
         # Try native text extraction first
         result = self._extract_native_text(file_path)
 
-        # If native text extraction failed, use OCR
-        if len(result['text']) < self.min_text_length:
-            result = self._extract_with_ocr(file_path)
-            result['extraction_method'] = 'ocr'
+        # Check both length AND quality
+        text_length_ok = len(result['text']) >= self.min_text_length
+        text_quality_ok = self._is_readable_text(result['text'])
+
+        print(f"[PDF] Native extraction: {len(result['text'])} chars, length_ok={text_length_ok}, quality_ok={text_quality_ok}")
+
+        # If native text extraction failed OR text is garbage, try OCR
+        if not text_length_ok or not text_quality_ok:
+            print(f"[PDF] Native text failed quality check, attempting OCR fallback...")
+            try:
+                result = self._extract_with_ocr(file_path)
+                result['extraction_method'] = 'ocr'
+
+                # Check OCR quality too
+                if not self._is_readable_text(result['text']):
+                    print(f"[PDF] WARNING: OCR also produced poor quality text!")
+                    result['text_quality'] = 'poor'
+                else:
+                    result['text_quality'] = 'good'
+            except Exception as ocr_error:
+                # OCR not available (tesseract/poppler not installed)
+                print(f"[PDF] OCR fallback failed: {ocr_error}")
+                print(f"[PDF] Marking as poor quality - OCR dependencies not installed")
+                result['extraction_method'] = 'native_failed'
+                result['text_quality'] = 'poor'
+                result['error'] = f"PDF has unreadable text encoding and OCR is not available. Install tesseract and poppler to enable OCR fallback."
         else:
             result['extraction_method'] = 'native'
+            result['text_quality'] = 'good'
 
         # Estimate study time (2 minutes per page on average)
         result['estimated_time_minutes'] = result['total_pages'] * 2

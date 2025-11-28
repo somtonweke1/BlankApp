@@ -13,10 +13,11 @@ from typing import Optional
 import json
 from pydantic import BaseModel
 
-from models import Base, User, Material, Session as SessionModel, Concept, Question
+from models import Base, User, Material, Session as SessionModel, Concept, Question, InversionParagraph, Gap, Patch
 from pdf_processor import PDFProcessor
 from concept_extractor import ConceptExtractor
 from engagement_engine import EngagementEngine
+from paragraph_inverter import ParagraphInverter
 
 load_dotenv()
 
@@ -37,6 +38,7 @@ Base.metadata.create_all(bind=engine)
 # Global instances
 pdf_processor = PDFProcessor()
 concept_extractor = ConceptExtractor()
+paragraph_inverter = ParagraphInverter()
 engagement_engines = {}  # Store active engagement engines by session_id
 
 
@@ -271,7 +273,18 @@ async def upload_material(
         pdf_data = pdf_processor.extract(file_path)
         material.total_pages = pdf_data['total_pages']
         material.estimated_time_minutes = pdf_data['estimated_time_minutes']
-        print(f"PDF extracted: {material.total_pages} pages")
+        print(f"PDF extracted: {material.total_pages} pages, method: {pdf_data.get('extraction_method')}, quality: {pdf_data.get('text_quality')}")
+
+        # Check text quality - reject if we can't read the PDF properly
+        if pdf_data.get('text_quality') == 'poor':
+            raise HTTPException(
+                status_code=400,
+                detail="Could not extract readable text from this PDF. This may be because:\n"
+                       "1. The PDF uses custom fonts that can't be decoded\n"
+                       "2. The PDF is an image/scan with poor quality\n"
+                       "3. The PDF is encrypted or protected\n\n"
+                       "Try uploading a different PDF or a text-based document."
+            )
 
         # Extract concepts
         material.processing_status = 'extracting_concepts'
@@ -292,6 +305,9 @@ async def upload_material(
         material.processing_status = 'ready'
         db.commit()
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (like our quality check) as-is
+        raise
     except Exception as e:
         print(f"ERROR during processing: {str(e)}")
         print(f"Error type: {type(e).__name__}")
@@ -571,6 +587,262 @@ async def get_user_progress(user_id: str, db: Session = Depends(get_db)):
         "struggling": len(struggling),
         "total_session_time_minutes": user.total_session_time_minutes,
         "mastery_rate": len(mastered) / len(states) if states else 0
+    }
+
+
+# ============================================================================
+# PARAGRAPH INVERSION ENDPOINTS
+# ============================================================================
+
+@app.post("/api/inversion/process/{material_id}")
+async def process_inversion(
+    material_id: str,
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Process a material for paragraph inversion.
+    Extracts paragraphs and creates inversions for each.
+    """
+    material = db.query(Material).filter(Material.id == uuid.UUID(material_id)).first()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+
+    user = db.query(User).filter(User.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    try:
+        # Extract PDF content
+        pdf_data = pdf_processor.extract(material.file_path)
+
+        # Get all paragraphs
+        paragraphs = []
+        for page_idx, page in enumerate(pdf_data['pages']):
+            for segment in page['segments']:
+                if segment['type'] == 'paragraph':
+                    paragraphs.append({
+                        'text': segment['text'],
+                        'page_number': page_idx + 1
+                    })
+
+        # Batch invert paragraphs
+        inverted_results = paragraph_inverter.batch_invert([p['text'] for p in paragraphs])
+
+        # Store in database
+        inversion_records = []
+        for idx, result in enumerate(inverted_results):
+            inversion = InversionParagraph(
+                material_id=material.id,
+                user_id=user.id,
+                paragraph_number=idx,
+                page_number=paragraphs[idx]['page_number'],
+                original_text=result['original'],
+                inverted_text=result['inverted']
+            )
+            db.add(inversion)
+            db.commit()
+            db.refresh(inversion)
+
+            inversion_records.append({
+                'id': str(inversion.id),
+                'paragraph_number': idx,
+                'page_number': paragraphs[idx]['page_number'],
+                'original': result['original'],
+                'inverted': result['inverted']
+            })
+
+        return {
+            'material_id': str(material_id),
+            'total_paragraphs': len(inversion_records),
+            'inversions': inversion_records
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Inversion processing failed: {str(e)}")
+
+
+@app.get("/api/inversion/{material_id}/paragraphs")
+async def get_inversions(
+    material_id: str,
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get all paragraph inversions for a material"""
+    inversions = db.query(InversionParagraph).filter(
+        InversionParagraph.material_id == uuid.UUID(material_id),
+        InversionParagraph.user_id == uuid.UUID(user_id)
+    ).order_by(InversionParagraph.paragraph_number).all()
+
+    return {
+        'material_id': material_id,
+        'total_paragraphs': len(inversions),
+        'inversions': [
+            {
+                'id': str(inv.id),
+                'paragraph_number': inv.paragraph_number,
+                'page_number': inv.page_number,
+                'original': inv.original_text,
+                'inverted': inv.inverted_text,
+                'gaps_identified': inv.gaps_identified,
+                'patch_created': inv.patch_created,
+                'gap_count': len(inv.gaps),
+                'patch_count': len(inv.patches)
+            }
+            for inv in inversions
+        ]
+    }
+
+
+class GapIdentifyRequest(BaseModel):
+    inversion_id: str
+
+
+@app.post("/api/inversion/identify-gaps")
+async def identify_gaps(
+    request: GapIdentifyRequest,
+    db: Session = Depends(get_db)
+):
+    """Identify logical gaps between original and inverted paragraph"""
+    inversion = db.query(InversionParagraph).filter(
+        InversionParagraph.id == uuid.UUID(request.inversion_id)
+    ).first()
+
+    if not inversion:
+        raise HTTPException(status_code=404, detail="Inversion not found")
+
+    try:
+        # Identify gaps
+        gaps = paragraph_inverter.identify_gaps(
+            inversion.original_text,
+            inversion.inverted_text
+        )
+
+        # Store gaps in database
+        gap_records = []
+        for gap_data in gaps:
+            gap = Gap(
+                inversion_paragraph_id=inversion.id,
+                gap_type=gap_data['type'],
+                description=gap_data['description'],
+                location=gap_data.get('location', 'both')
+            )
+            db.add(gap)
+            db.commit()
+            db.refresh(gap)
+
+            gap_records.append({
+                'id': str(gap.id),
+                'type': gap.gap_type,
+                'description': gap.description,
+                'location': gap.location
+            })
+
+        # Update inversion status
+        inversion.gaps_identified = True
+        db.commit()
+
+        return {
+            'inversion_id': str(inversion.id),
+            'gaps': gap_records,
+            'total_gaps': len(gap_records)
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gap identification failed: {str(e)}")
+
+
+class PatchCreateRequest(BaseModel):
+    inversion_id: str
+    patch_name: str
+    patch_description: str
+    patch_type: str
+    creativity_score: Optional[int] = None
+    addresses_gaps: Optional[list] = None
+
+
+@app.post("/api/inversion/create-patch")
+async def create_patch(
+    request: PatchCreateRequest,
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    """Create a patch that reconciles original and inverted paragraphs"""
+    inversion = db.query(InversionParagraph).filter(
+        InversionParagraph.id == uuid.UUID(request.inversion_id)
+    ).first()
+
+    if not inversion:
+        raise HTTPException(status_code=404, detail="Inversion not found")
+
+    # Create patch
+    patch = Patch(
+        inversion_paragraph_id=inversion.id,
+        user_id=uuid.UUID(user_id),
+        patch_name=request.patch_name,
+        patch_description=request.patch_description,
+        patch_type=request.patch_type,
+        creativity_score=request.creativity_score,
+        addresses_gaps=request.addresses_gaps or []
+    )
+    db.add(patch)
+
+    # Update inversion status
+    inversion.patch_created = True
+    db.commit()
+    db.refresh(patch)
+
+    return {
+        'patch_id': str(patch.id),
+        'inversion_id': str(inversion.id),
+        'patch_name': patch.patch_name,
+        'created_at': patch.created_at.isoformat()
+    }
+
+
+@app.get("/api/inversion/{inversion_id}/gaps")
+async def get_gaps(inversion_id: str, db: Session = Depends(get_db)):
+    """Get all gaps for a specific inversion paragraph"""
+    gaps = db.query(Gap).filter(
+        Gap.inversion_paragraph_id == uuid.UUID(inversion_id)
+    ).all()
+
+    return {
+        'inversion_id': inversion_id,
+        'gaps': [
+            {
+                'id': str(gap.id),
+                'type': gap.gap_type,
+                'description': gap.description,
+                'location': gap.location,
+                'resolved': gap.resolved
+            }
+            for gap in gaps
+        ]
+    }
+
+
+@app.get("/api/inversion/{inversion_id}/patches")
+async def get_patches(inversion_id: str, db: Session = Depends(get_db)):
+    """Get all patches for a specific inversion paragraph"""
+    patches = db.query(Patch).filter(
+        Patch.inversion_paragraph_id == uuid.UUID(inversion_id)
+    ).all()
+
+    return {
+        'inversion_id': inversion_id,
+        'patches': [
+            {
+                'id': str(patch.id),
+                'patch_name': patch.patch_name,
+                'patch_description': patch.patch_description,
+                'patch_type': patch.patch_type,
+                'creativity_score': patch.creativity_score,
+                'addresses_gaps': patch.addresses_gaps,
+                'created_at': patch.created_at.isoformat()
+            }
+            for patch in patches
+        ]
     }
 
 
