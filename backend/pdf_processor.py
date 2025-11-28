@@ -286,7 +286,77 @@ class PDFProcessor:
         if current_section:
             sections.append(current_section)
 
-        return sections
+        # Break large paragraphs into smaller chunks (1-3 sentences)
+        final_sections = []
+        for section in sections:
+            if section['type'] == 'paragraph':
+                # Split large paragraphs into smaller chunks
+                chunks = self._split_paragraph_into_chunks(section['content'])
+                for chunk in chunks:
+                    final_sections.append({
+                        'type': 'paragraph',
+                        'content': chunk
+                    })
+            else:
+                final_sections.append(section)
+
+        return final_sections
+
+    def _split_paragraph_into_chunks(self, text: str, max_sentences: int = 2) -> List[str]:
+        """
+        Split a paragraph into smaller chunks of 1-2 sentences each.
+
+        Args:
+            text: The paragraph text
+            max_sentences: Maximum sentences per chunk (default 2)
+
+        Returns:
+            List of smaller text chunks
+        """
+        # Split into sentences (basic approach)
+        import re
+
+        # Split on periods, question marks, exclamation points (followed by space or end)
+        sentences = re.split(r'([.!?]+)\s+', text)
+
+        # Recombine sentences with their punctuation
+        full_sentences = []
+        i = 0
+        while i < len(sentences):
+            if i + 1 < len(sentences) and sentences[i + 1] in ['.', '!', '?', '..', '...']:
+                full_sentences.append(sentences[i] + sentences[i + 1])
+                i += 2
+            elif sentences[i].strip():
+                full_sentences.append(sentences[i])
+                i += 1
+            else:
+                i += 1
+
+        # Group into chunks of max_sentences
+        chunks = []
+        current_chunk = []
+
+        for sentence in full_sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+
+            current_chunk.append(sentence)
+
+            # If we've reached max sentences, create a chunk
+            if len(current_chunk) >= max_sentences:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = []
+
+        # Add remaining sentences
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+
+        # If no chunks created (e.g., no sentence endings detected), return original as one chunk
+        if not chunks:
+            chunks = [text]
+
+        return chunks
 
     def _is_heading(self, line: str) -> bool:
         """Detect if line is a heading"""
