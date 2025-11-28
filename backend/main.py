@@ -13,11 +13,12 @@ from typing import Optional
 import json
 from pydantic import BaseModel
 
-from models import Base, User, Material, Session as SessionModel, Concept, Question, InversionParagraph, Gap, Patch
+from models import Base, User, Material, Session as SessionModel, Concept, Question, InversionParagraph, Gap, Patch, MasteryCheckpoint, UserMasteryProgress
 from pdf_processor import PDFProcessor
 from concept_extractor import ConceptExtractor
 from engagement_engine import EngagementEngine
 from paragraph_inverter import ParagraphInverter
+from patch_scorer import PatchScorer
 
 load_dotenv()
 
@@ -39,6 +40,7 @@ Base.metadata.create_all(bind=engine)
 pdf_processor = PDFProcessor()
 concept_extractor = ConceptExtractor()
 paragraph_inverter = ParagraphInverter()
+patch_scorer = PatchScorer()
 engagement_engines = {}  # Store active engagement engines by session_id
 
 
@@ -778,7 +780,26 @@ async def create_patch(
     if not inversion:
         raise HTTPException(status_code=404, detail="Inversion not found")
 
-    # Create patch
+    # Get gaps for this inversion
+    gaps = db.query(Gap).filter(
+        Gap.inversion_paragraph_id == inversion.id
+    ).all()
+
+    gap_dicts = [{
+        'type': gap.gap_type,
+        'description': gap.description,
+        'location': gap.location
+    } for gap in gaps]
+
+    # Score the patch using AI
+    scoring_result = patch_scorer.score_patch(
+        original=inversion.original_text,
+        inverted=inversion.inverted_text,
+        gaps=gap_dicts,
+        patch_description=request.patch_description
+    )
+
+    # Create patch with scoring results
     patch = Patch(
         inversion_paragraph_id=inversion.id,
         user_id=uuid.UUID(user_id),
@@ -786,12 +807,22 @@ async def create_patch(
         patch_description=request.patch_description,
         patch_type=request.patch_type,
         creativity_score=request.creativity_score,
-        addresses_gaps=request.addresses_gaps or []
+        addresses_gaps=request.addresses_gaps or [],
+        # AI scoring results
+        quality_score=scoring_result['score'],
+        passed=scoring_result['passed'],
+        strengths=scoring_result['strengths'],
+        weaknesses=scoring_result['weaknesses'],
+        feedback=scoring_result['specific_feedback'],
+        next_steps=scoring_result.get('next_steps', []),
+        addresses_all_gaps=scoring_result['addresses_all_gaps']
     )
     db.add(patch)
 
-    # Update inversion status
-    inversion.patch_created = True
+    # Only update inversion status if patch passed
+    if scoring_result['passed']:
+        inversion.patch_created = True
+
     db.commit()
     db.refresh(patch)
 
@@ -799,7 +830,15 @@ async def create_patch(
         'patch_id': str(patch.id),
         'inversion_id': str(inversion.id),
         'patch_name': patch.patch_name,
-        'created_at': patch.created_at.isoformat()
+        'created_at': patch.created_at.isoformat(),
+        # Include scoring results in response
+        'quality_score': patch.quality_score,
+        'passed': patch.passed,
+        'strengths': patch.strengths,
+        'weaknesses': patch.weaknesses,
+        'feedback': patch.feedback,
+        'next_steps': patch.next_steps,
+        'requires_revision': not patch.passed
     }
 
 
@@ -842,10 +881,70 @@ async def get_patches(inversion_id: str, db: Session = Depends(get_db)):
                 'patch_type': patch.patch_type,
                 'creativity_score': patch.creativity_score,
                 'addresses_gaps': patch.addresses_gaps,
-                'created_at': patch.created_at.isoformat()
+                'created_at': patch.created_at.isoformat(),
+                # Include scoring info
+                'quality_score': patch.quality_score,
+                'passed': patch.passed,
+                'strengths': patch.strengths,
+                'weaknesses': patch.weaknesses,
+                'feedback': patch.feedback,
+                'next_steps': patch.next_steps
             }
             for patch in patches
         ]
+    }
+
+
+class SocraticHelpRequest(BaseModel):
+    inversion_id: str
+    failed_patch_id: str
+
+
+@app.post("/api/inversion/get-help")
+async def get_socratic_help(
+    request: SocraticHelpRequest,
+    db: Session = Depends(get_db)
+):
+    """Get Socratic guidance when user is stuck on a patch"""
+    inversion = db.query(InversionParagraph).filter(
+        InversionParagraph.id == uuid.UUID(request.inversion_id)
+    ).first()
+
+    if not inversion:
+        raise HTTPException(status_code=404, detail="Inversion not found")
+
+    failed_patch = db.query(Patch).filter(
+        Patch.id == uuid.UUID(request.failed_patch_id)
+    ).first()
+
+    if not failed_patch:
+        raise HTTPException(status_code=404, detail="Patch not found")
+
+    # Get gaps
+    gaps = db.query(Gap).filter(
+        Gap.inversion_paragraph_id == inversion.id
+    ).all()
+
+    gap_dicts = [{
+        'type': gap.gap_type,
+        'description': gap.description,
+        'location': gap.location
+    } for gap in gaps]
+
+    # Get Socratic help
+    help_response = patch_scorer.get_socratic_help(
+        original=inversion.original_text,
+        inverted=inversion.inverted_text,
+        gaps=gap_dicts,
+        failed_patch=failed_patch.patch_description,
+        failure_reason=failed_patch.feedback or "Patch did not meet quality threshold"
+    )
+
+    return {
+        'inversion_id': request.inversion_id,
+        'questions': help_response['questions'],
+        'hints': help_response['hints'],
+        'encouragement': help_response['encouragement']
     }
 
 

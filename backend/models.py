@@ -251,8 +251,82 @@ class Patch(Base):
     creativity_score = Column(Integer)  # 1-10 subjective rating by user
     addresses_gaps = Column(JSONB, default=list)  # List of gap IDs this patch addresses
 
+    # Quality scoring (AI-evaluated)
+    quality_score = Column(Float)  # 1.0-10.0 AI-evaluated quality
+    passed = Column(Boolean, default=False)  # True if score >= 7.0
+    strengths = Column(JSONB, default=list)  # What the patch does well
+    weaknesses = Column(JSONB, default=list)  # What needs improvement
+    feedback = Column(Text)  # Specific feedback from AI
+    next_steps = Column(JSONB, default=list)  # Suggestions for improvement
+    addresses_all_gaps = Column(Boolean, default=False)  # Verified by AI
+
+    # Revision tracking
+    revision_number = Column(Integer, default=1)  # How many times revised
+    previous_version_id = Column(UUID(as_uuid=True))  # Link to previous attempt
+
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
 
     # Relationships
     inversion_paragraph = relationship("InversionParagraph", back_populates="patches")
+
+
+class MasteryCheckpoint(Base):
+    """Tracks user progress through mastery verification system."""
+    __tablename__ = 'mastery_checkpoints'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'))
+    inversion_paragraph_id = Column(UUID(as_uuid=True), ForeignKey('inversion_paragraphs.id', ondelete='CASCADE'))
+
+    # Checkpoint details
+    checkpoint_type = Column(String(50))  # 'initial', 'review_1day', 'review_3day', 'review_1week', 'final_exam'
+    passed = Column(Boolean, default=False)
+    score = Column(Float)  # Performance score
+    confidence_level = Column(Integer)  # User's self-reported confidence (1-10)
+
+    # Timing
+    attempted_at = Column(TIMESTAMP, server_default=func.now())
+    next_review_at = Column(TIMESTAMP)  # When next review is scheduled
+
+    # Struggle indicators
+    time_spent_seconds = Column(Integer)  # How long they spent
+    revisions_needed = Column(Integer, default=0)  # How many times they revised
+    needed_help = Column(Boolean, default=False)  # Whether they used AI tutor
+
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+
+class UserMasteryProgress(Base):
+    """Overall mastery progress for a user on a material."""
+    __tablename__ = 'user_mastery_progress'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'))
+    material_id = Column(UUID(as_uuid=True), ForeignKey('materials.id', ondelete='CASCADE'))
+
+    # Progress metrics
+    paragraphs_total = Column(Integer, default=0)
+    paragraphs_completed = Column(Integer, default=0)
+    paragraphs_mastered = Column(Integer, default=0)  # Passed all reviews
+
+    # Quality metrics
+    avg_patch_quality = Column(Float)  # Average score across all patches
+    avg_confidence = Column(Float)  # Average self-reported confidence
+    avg_actual_performance = Column(Float)  # Average checkpoint scores
+
+    # Time tracking
+    total_time_minutes = Column(Integer, default=0)
+    last_activity_at = Column(TIMESTAMP)
+
+    # Mastery status
+    mastery_certified = Column(Boolean, default=False)
+    certification_date = Column(TIMESTAMP)
+    final_exam_score = Column(Float)
+
+    # Struggle points (for remediation)
+    weak_paragraphs = Column(JSONB, default=list)  # IDs of paragraphs they struggled with
+    strong_paragraphs = Column(JSONB, default=list)  # IDs of paragraphs they excelled at
+
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
