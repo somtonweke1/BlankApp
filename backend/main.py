@@ -619,10 +619,13 @@ async def process_inversion(
         # Get all paragraphs
         paragraphs = []
         for page_idx, page in enumerate(pdf_data['pages']):
-            for segment in page['segments']:
+            # Segment the page text into structured sections
+            segments = pdf_processor.segment_by_structure(page['text'])
+
+            for segment in segments:
                 if segment['type'] == 'paragraph':
                     paragraphs.append({
-                        'text': segment['text'],
+                        'text': segment['content'],
                         'page_number': page_idx + 1
                     })
 

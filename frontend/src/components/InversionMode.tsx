@@ -31,7 +31,9 @@ const InversionMode: React.FC<InversionModeProps> = ({
       );
 
       if (!response.ok) {
-        throw new Error('Failed to process inversions');
+        const errorText = await response.text();
+        console.error('Backend error:', errorText);
+        throw new Error(`Server returned ${response.status}: ${errorText}`);
       }
 
       const data = await response.json();
@@ -39,7 +41,8 @@ const InversionMode: React.FC<InversionModeProps> = ({
       setInversionsReady(true);
     } catch (err) {
       console.error('Error processing inversions:', err);
-      setError('Failed to create inversions. Please try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Failed to create inversions: ${errorMessage}\n\nThis might mean the backend is still deploying. Please wait a minute and try again.`);
     } finally {
       setProcessing(false);
     }
@@ -106,7 +109,10 @@ const InversionMode: React.FC<InversionModeProps> = ({
             border: '2px solid #ef4444',
             borderRadius: '8px',
             marginBottom: '1rem',
-            color: '#991b1b'
+            color: '#991b1b',
+            whiteSpace: 'pre-wrap',
+            fontSize: '0.95rem',
+            lineHeight: '1.5'
           }}>
             {error}
           </div>
